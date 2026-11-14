@@ -207,6 +207,36 @@ input[type=text]:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
 .pips i { width: 12px; height: 12px; border-radius: 50%; background: var(--hp); display: inline-block; }
 .pips i.off { background: #3a3f55; }
 
+/* Arène 3D */
+.scene3d { position: relative; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; background: #0a0d1a; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.scene3d canvas { display: block; }
+.s3-top { position: absolute; inset: 8px 10px auto 10px; display: grid; gap: 6px; pointer-events: none; }
+.s3-top .hud { color: var(--text); font-size: 12px; text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+.s3-boss { justify-self: center; width: min(72%, 380px); text-align: center; color: var(--gold); font-family: var(--f-display); font-size: 18px; line-height: 1.2; text-shadow: 0 1px 3px #000; }
+.s3-boss .bar { height: 10px; border-color: var(--gold-dim); }
+.s3-boss .bar > i { background: var(--danger); }
+.s3-center { position: absolute; left: 0; right: 0; top: 34%; text-align: center; pointer-events: none; font-family: var(--f-display); font-weight: 700; font-size: clamp(24px, 6vw, 40px); color: #fff; text-shadow: 0 0 14px var(--danger), 0 2px 4px #000; }
+.s3-fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.s3-fx.hit { animation: hitfx .3s; }
+@keyframes hitfx { 40% { background: #e2583f59; } }
+.pop3 { position: absolute; transform: translate(-50%, -50%); font-family: var(--f-mono); font-weight: 600; font-size: 14px; color: var(--gold); text-shadow: 0 1px 2px #000, 0 0 4px #000; animation: rise3 .9s ease-out forwards; white-space: nowrap; }
+.pop3.heal { color: #7dffa8; }
+.pop3.hurt { color: #ff8a75; }
+@keyframes rise3 { to { transform: translate(-50%, -260%); opacity: 0; } }
+.s3-left { position: absolute; left: 8px; top: 78px; width: 150px; display: grid; gap: 4px; }
+.s3-left:empty { display: none; }
+.s3-left .frame { padding: 4px 8px; background: #0d1020d9; }
+.s3-left .frame .nm { font-size: 13px; }
+@media (max-width: 620px) { .s3-left { position: static; width: auto; grid-template-columns: repeat(3, 1fr); padding: 6px; background: #0d1020; } }
+.abar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.abar button { font: inherit; display: grid; gap: 2px; justify-items: center; padding: 8px 4px; border-radius: 6px; border: 2px solid var(--line); background: #141a30; color: var(--muted); cursor: pointer; touch-action: manipulation; }
+.abar button kbd { font-family: var(--f-mono); font-size: 18px; color: var(--text); }
+.abar button span { font-size: 12px; }
+.abar button.now { border-color: var(--gold); color: var(--gold); background: #2a2414; box-shadow: 0 0 16px #e0ad4a66; }
+.abar button.now kbd { color: var(--gold); }
+.hint { font-size: 14px; color: var(--muted); margin: 0; flex: 1 1 240px; }
+.hint kbd, .btn kbd, .lead kbd { font-family: var(--f-mono); font-size: .85em; border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; opacity: .85; }
+
 /* Verdict */
 .verdict-head { display: grid; gap: 10px; position: relative; }
 .stamp {
@@ -261,6 +291,7 @@ footer { text-align: center; color: var(--muted); font-size: 13px; font-family: 
   <footer>Le Conseil des Officiers se réserve le droit de te refuser pour ton pseudo.</footer>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ============ CONFIG : à personnaliser ============ */
 const CONFIG = {
@@ -283,6 +314,7 @@ const S = {
   trials: {},           // role -> {bonus, summary, detail}
   keyHandler: null,
   timers: [],
+  cleanups: [],        // arrêts de scène 3D, écouteurs clavier
 };
 
 const ROLES = {
@@ -381,7 +413,10 @@ function digitOf(e) {
 function later(fn, ms) { const id = setTimeout(fn, ms); S.timers.push(id); return id; }
 const INTERVALS = new Set();
 function every(fn, ms) { const id = setInterval(fn, ms); S.timers.push(id); INTERVALS.add(id); return id; }
-function clearAll() { S.timers.forEach((id) => { clearTimeout(id); clearInterval(id); }); S.timers = []; S.keyHandler = null; }
+function clearAll() {
+  S.timers.forEach((id) => { clearTimeout(id); clearInterval(id); }); S.timers = []; S.keyHandler = null;
+  S.cleanups.splice(0).forEach((fn) => { try { fn(); } catch (err) { console.error(err); } });
+}
 
 function setStep(n, label) {
   $("#cast-fill").style.width = Math.round((n / TOTAL_STEPS) * 100) + "%";
@@ -599,17 +634,23 @@ const TRIALS = {
 function screenTrialIntro(role) {
   setStep(2 + Q.length, "Mise en situation");
   const t = TRIALS[role];
+  const use3d = has3D();
   const isMain = role === S.role;
   show(`
     <div class="eyebrow"><span class="tag">${isMain ? "Rôle principal" : "Bonus"}</span><span>${ROLES[role].label}</span></div>
     <h2>${t.title}</h2>
-    <p class="lead">${t.rules}</p>
+    <p class="lead">${use3d ? t.rules3d : t.rules}</p>
     <button class="btn" type="button" id="trial-go">C'est parti</button>
   `);
   $("#trial-go").addEventListener("click", () => {
     clearAll();
     stage.innerHTML = `<div class="eyebrow"><span class="tag">${ROLES[role].label}</span><span>En combat</span></div><div id="game" style="display:grid;gap:14px"></div>`;
-    t.run($("#game"), (res) => { S.trials[role] = res; screenTrialResult(role); });
+    const game = $("#game"), finish = (res) => { S.trials[role] = res; screenTrialResult(role); };
+    if (use3d) {
+      try { t.run3d(game, finish); return; }
+      catch (err) { console.error("3D indisponible, retour à la version 2D :", err); clearAll(); game.innerHTML = ""; }
+    }
+    t.run(game, finish);
   });
   $("#trial-go").focus();
 }
@@ -926,6 +967,613 @@ function dpsGame(root, done) {
     later(() => done({ bonus, headline, lines, summary: `DPS : ${dps.toLocaleString("fr-FR")} dps, ${burns} brûlure(s)${dead ? ", mort" : ""}` }), 500);
   }
 }
+
+/* ============ ÉPREUVES EN 3D (three.js) ============ */
+const ARENA_R = 13;
+const BOSS_NAME = "Grobular le Mal Réveillé";
+function has3D() {
+  if (!window.THREE) return false;
+  try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch { return false; }
+}
+const mat3 = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.9, flatShading: true }, extra));
+const flat3 = (color, extra) => new THREE.MeshBasicMaterial(Object.assign({ color }, extra));
+
+function makeLabel(text, color = "#ece6d4") {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 64;
+  const x = c.getContext("2d");
+  x.font = "600 30px 'Alegreya Sans', 'Segoe UI', sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.lineWidth = 6; x.strokeStyle = "rgba(0,0,0,.85)"; x.strokeText(text, 128, 32, 248);
+  x.fillStyle = color; x.fillText(text, 128, 32, 248);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
+  s.scale.set(2.6, 0.65, 1); s.renderOrder = 5;
+  return s;
+}
+
+// Personnage low-poly : corps, tête, accessoire de rôle, nom et barre de vie optionnels.
+function makeFigure(color, opt = {}) {
+  const T = THREE, g = new T.Group(), rig = new T.Group();
+  rig.rotation.y = Math.PI; g.add(rig); // face au boss par défaut
+  const body = new T.Mesh(new T.CylinderGeometry(0.32, 0.46, 1.1, 7), mat3(color)); body.position.y = 0.75;
+  const head = new T.Mesh(new T.IcosahedronGeometry(0.3, 0), mat3(0xe6c7a0)); head.position.y = 1.6;
+  rig.add(body, head);
+  if (opt.kit === "tank") {
+    const shield = new T.Mesh(new T.BoxGeometry(0.75, 0.95, 0.12), mat3(0x9aa3c2)); shield.position.set(-0.5, 0.9, 0.35); rig.add(shield);
+    const pads = new T.Mesh(new T.BoxGeometry(1.05, 0.22, 0.5), mat3(0x9aa3c2)); pads.position.y = 1.28; rig.add(pads);
+  } else if (opt.kit === "heal") {
+    const staff = new T.Mesh(new T.CylinderGeometry(0.04, 0.04, 2, 5), mat3(0x8a6a3a)); staff.position.set(0.5, 1, 0); rig.add(staff);
+    const orb = new T.Mesh(new T.IcosahedronGeometry(0.17, 0), flat3(0x7dffa8)); orb.position.set(0.5, 2.1, 0); rig.add(orb);
+  } else if (opt.kit === "dps") {
+    const sword = new T.Mesh(new T.BoxGeometry(0.09, 1.2, 0.09), mat3(0xd9deee)); sword.position.set(0.5, 1.05, 0.2); sword.rotation.x = 0.6; rig.add(sword);
+  }
+  let top = 2.15;
+  if (opt.bar) {
+    const bg = new T.Sprite(new T.SpriteMaterial({ color: 0x05060c, depthTest: false, transparent: true, opacity: 0.8 }));
+    bg.scale.set(1.38, 0.2, 1); bg.position.y = top; bg.renderOrder = 6;
+    const fg = new T.Sprite(new T.SpriteMaterial({ color: 0x3fbf6a, depthTest: false }));
+    fg.center.set(0, 0.5); fg.position.set(-0.65, top, 0); fg.scale.set(1.3, 0.13, 1); fg.renderOrder = 7;
+    g.add(bg, fg);
+    g.userData.setHp = (r) => { fg.scale.x = Math.max(0.001, 1.3 * clamp(r, 0, 1)); fg.material.color.set(r < 0.35 ? 0xd8a636 : 0x3fbf6a); };
+    g.userData.hideBar = () => { bg.visible = fg.visible = false; };
+    top += 0.38;
+  }
+  if (opt.name) { const l = makeLabel(opt.name, opt.labelColor); l.position.y = top + 0.15; g.add(l); g.userData.label = l; }
+  g.userData.body = body; g.userData.rig = rig;
+  g.userData.fall = () => { rig.rotation.x = -Math.PI / 2; rig.position.y = 0.4; body.material.color.set(0x565b70); if (g.userData.hideBar) g.userData.hideBar(); };
+  return g;
+}
+
+function makeBoss() {
+  const T = THREE, g = new T.Group();
+  const body = new T.Mesh(new T.DodecahedronGeometry(1.7, 0), mat3(0x5a2238)); body.position.y = 2.2; body.scale.set(1, 1.15, 0.9);
+  const head = new T.Mesh(new T.DodecahedronGeometry(0.85, 0), mat3(0x6d2a42)); head.position.set(0, 4.3, 0.35);
+  g.add(body, head);
+  for (const s of [-1, 1]) {
+    const eye = new T.Mesh(new T.SphereGeometry(0.13, 8, 6), flat3(0xffd23a)); eye.position.set(0.3 * s, 4.4, 1.08); g.add(eye);
+    const horn = new T.Mesh(new T.ConeGeometry(0.22, 1.2, 5), mat3(0xd8cfa8)); horn.position.set(0.62 * s, 5.2, 0.2); horn.rotation.z = -0.5 * s; g.add(horn);
+    const leg = new T.Mesh(new T.BoxGeometry(0.9, 1.1, 0.9), mat3(0x45192b)); leg.position.set(0.8 * s, 0.55, 0); g.add(leg);
+    const pivot = new T.Group(); pivot.position.set(2.05 * s, 3.4, 0.2);
+    const arm = new T.Mesh(new T.BoxGeometry(0.75, 2.4, 0.75), mat3(0x4a1c2e)); arm.position.y = -1.1; pivot.add(arm);
+    const fist = new T.Mesh(new T.DodecahedronGeometry(0.6, 0), mat3(0x6d2a42)); fist.position.y = -2.4; pivot.add(fist);
+    g.add(pivot);
+    g.userData[s < 0 ? "armL" : "armR"] = pivot;
+  }
+  g.userData.body = body;
+  return g;
+}
+
+function makeMob(big) {
+  const T = THREE, g = new T.Group();
+  const body = new T.Mesh(new T.ConeGeometry(0.48, 1.05, 6), mat3(big ? 0x7a1f3a : 0xb23a2e)); body.position.y = 0.52;
+  const head = new T.Mesh(new T.IcosahedronGeometry(0.3, 0), mat3(big ? 0x99304d : 0xd8553f)); head.position.y = 1.18;
+  g.add(body, head);
+  for (const s of [-1, 1]) {
+    const eye = new T.Mesh(new T.SphereGeometry(0.06, 6, 5), flat3(0xffe45a)); eye.position.set(0.12 * s, 1.22, 0.27); g.add(eye);
+    if (big) { const horn = new T.Mesh(new T.ConeGeometry(0.09, 0.45, 4), mat3(0xd8cfa8)); horn.position.set(0.22 * s, 1.5, 0); horn.rotation.z = -0.4 * s; g.add(horn); }
+  }
+  // Zone de clic généreuse, invisible.
+  const hitbox = new T.Mesh(new T.SphereGeometry(1.0, 8, 6), flat3(0xffffff, { transparent: true, opacity: 0, depthWrite: false })); hitbox.position.y = 0.8; g.add(hitbox);
+  g.scale.setScalar(big ? 1.9 : 1.3);
+  return g;
+}
+
+function makeFire(x, z, r) {
+  const T = THREE, g = new T.Group(); g.position.set(x, 0, z);
+  const disc = new T.Mesh(new T.CircleGeometry(r, 28), flat3(0xff5a1f, { transparent: true, opacity: 0.2, depthWrite: false })); disc.rotation.x = -Math.PI / 2; disc.position.y = 0.04;
+  const ring = new T.Mesh(new T.RingGeometry(r - 0.14, r, 40), flat3(0xffc04a, { transparent: true, opacity: 0.95, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05;
+  g.add(disc, ring);
+  const flames = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2, d = r * (i % 2 ? 0.35 : 0.7);
+    const f = new T.Mesh(new T.ConeGeometry(0.28, 1.1, 5), flat3(i % 2 ? 0xffc04a : 0xff7a2a, { transparent: true, opacity: 0.9 }));
+    f.position.set(Math.cos(a) * d, 0.55, Math.sin(a) * d); f.visible = false; g.add(f); flames.push(f);
+  }
+  return { g, disc, ring, flames, x, z, r, t: 0, state: "warn" };
+}
+
+function makeArena(root, opt = {}) {
+  const T = THREE;
+  const wrap = document.createElement("div");
+  wrap.className = "scene3d";
+  wrap.innerHTML = `<div class="s3-top"></div><div class="s3-center"></div><div class="s3-fx"></div><div class="s3-left"></div>`;
+  root.appendChild(wrap);
+  const renderer = new T.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const canvas = renderer.domElement;
+  wrap.prepend(canvas);
+
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0a0d1a);
+  scene.fog = new T.Fog(0x0a0d1a, 26, 62);
+  const camera = new T.PerspectiveCamera(48, 1.6, 0.1, 150);
+  const camPos = new T.Vector3(...(opt.camPos || [0, 9, 16])), camLook = new T.Vector3(...(opt.camLook || [0, 1, 2]));
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  function resize() {
+    const w = wrap.clientWidth || 600, h = Math.round(clamp(w * 0.62, 250, 460));
+    renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  resize(); window.addEventListener("resize", resize);
+
+  scene.add(new T.HemisphereLight(0x9fb0ff, 0x2a1c12, 0.95));
+  const sun = new T.DirectionalLight(0xffdca0, 0.95); sun.position.set(6, 12, 9); scene.add(sun);
+  const glow = new T.PointLight(0xff5a2a, 1.3, 20); glow.position.set(0, 3.5, 2.5); scene.add(glow);
+
+  const floor = new T.Mesh(new T.CircleGeometry(ARENA_R, 48), mat3(0x2a3050)); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const outer = new T.Mesh(new T.RingGeometry(ARENA_R, ARENA_R + 9, 48), mat3(0x12162a)); outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; scene.add(outer);
+  for (const [r, o] of [[ARENA_R - 0.35, 0.7], [9, 0.25], [3.4, 0.4]]) {
+    const ring = new T.Mesh(new T.RingGeometry(r, r + 0.12, 72), flat3(0x9c7a35, { transparent: true, opacity: o })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.015; scene.add(ring);
+  }
+  for (let i = 0; i < 12; i++) { // rayons gravés au sol
+    const a = (i / 12) * Math.PI * 2;
+    const line = new T.Mesh(new T.PlaneGeometry(0.07, 5.2), flat3(0x9c7a35, { transparent: true, opacity: 0.22 }));
+    line.rotation.x = -Math.PI / 2; line.rotation.z = -a; line.position.set(Math.sin(a) * 6.2, 0.012, Math.cos(a) * 6.2); scene.add(line);
+  }
+  for (let i = 0; i < 14; i++) { // piliers et torches, sauf devant la caméra
+    const a = (i / 14) * Math.PI * 2, x = Math.cos(a) * (ARENA_R + 1.3), z = Math.sin(a) * (ARENA_R + 1.3);
+    if (z > 5) continue;
+    const h = 4.5 + (i % 3) * 0.9;
+    const p = new T.Mesh(new T.CylinderGeometry(0.6, 0.8, h, 6), mat3(0x1d2340)); p.position.set(x, h / 2, z); scene.add(p);
+    const torch = new T.Mesh(new T.IcosahedronGeometry(0.28, 0), flat3(0xffa040)); torch.position.set(x, h + 0.35, z); scene.add(torch);
+  }
+  const boss = makeBoss(); scene.add(boss);
+
+  const fxEl = wrap.querySelector(".s3-fx"), v = new T.Vector3();
+  function floatText(pos, text, cls = "") {
+    v.set(pos.x, pos.y === undefined ? 1.8 : pos.y, pos.z).project(camera);
+    const d = document.createElement("div"); d.className = "pop3 " + cls; d.textContent = text;
+    d.style.left = (v.x * 0.5 + 0.5) * canvas.clientWidth + "px"; d.style.top = (-v.y * 0.5 + 0.5) * canvas.clientHeight + "px";
+    fxEl.appendChild(d); setTimeout(() => d.remove(), 900);
+  }
+  function flash() { fxEl.classList.remove("hit"); void fxEl.offsetWidth; fxEl.classList.add("hit"); shake = 0.25; }
+
+  const ray = new T.Raycaster(), ndc = new T.Vector2(), ground = new T.Plane(new T.Vector3(0, 1, 0), 0);
+  function setRay(e) { const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); }
+  function groundAt(e) { setRay(e); const p = new T.Vector3(); return ray.ray.intersectPlane(ground, p) ? p : null; }
+  function pick(e, groups) {
+    setRay(e);
+    for (const hit of ray.intersectObjects(groups, true)) {
+      let o = hit.object;
+      while (o && o.userData.pick === undefined) o = o.parent;
+      if (o) return o.userData.pick;
+    }
+    return null;
+  }
+
+  const frames = [];
+  let raf = 0, last = performance.now(), running = true, shake = 0;
+  function tick(now) {
+    if (!running) return;
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+    if (!opt.follow) { camera.position.copy(camPos); }
+    boss.userData.body.position.y = 2.2 + Math.sin(now / 420) * 0.07;
+    for (const f of frames) f(dt, now / 1000);
+    if (shake > 0) { shake -= dt; camera.position.x += rand(-0.09, 0.09); camera.position.y += rand(-0.09, 0.09); }
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(tick);
+  }
+  raf = requestAnimationFrame((n) => { last = n; tick(n); });
+  function stop() {
+    if (!running) return;
+    running = false; cancelAnimationFrame(raf); window.removeEventListener("resize", resize);
+    renderer.dispose();
+  }
+  S.cleanups.push(stop);
+
+  return {
+    wrap, canvas, scene, camera, boss, floatText, flash, groundAt, pick,
+    top: wrap.querySelector(".s3-top"), center: wrap.querySelector(".s3-center"), left: wrap.querySelector(".s3-left"),
+    onFrame: (fn) => frames.push(fn),
+  };
+}
+
+const fmtTime = (s) => Math.max(0, s).toFixed(1).replace(".", ",");
+function logTo(el, max) {
+  return (cls, txt) => { el.insertAdjacentHTML("afterbegin", `<div class="${cls}">${esc(txt)}</div>`); while (el.children.length > max) el.lastChild.remove(); };
+}
+
+/* ---------- DPS en 3D ---------- */
+function dpsGame3D(root, done) {
+  const T = THREE, DURATION = 25, RANGE = 7.5, SPEED = 6.5, BOSS_HP = 150000, WARN = 1.4, BURN = 3.5;
+  const A = makeArena(root, { camPos: [0, 7.5, 15], camLook: [0, 1.2, 1], follow: true });
+  A.top.innerHTML = `
+    <div class="s3-boss"><span>${BOSS_NAME}</span><div class="bar"><i id="b-hp"></i></div></div>
+    <div class="hud"><span>Temps <b id="d-t">25,0</b> s</span><span>DPS <b id="d-dps">0</b></span><span>Combo <b id="d-c">0</b></span><span>Vie <span class="pips" id="d-l"></span></span></div>`;
+  const NAMES = ["Entaille", "Brûlure", "Éclair", "Gros coup"];
+  root.insertAdjacentHTML("beforeend", `
+    <div class="abar" id="abar">${NAMES.map((n, i) => `<button type="button" data-k="${i + 1}"><kbd>${i + 1}</kbd><span>${n}</span></button>`).join("")}</div>
+    <p class="hint">Déplacement : <kbd>Z</kbd> <kbd>Q</kbd> <kbd>S</kbd> <kbd>D</kbd>, les flèches, ou un clic sur le sol. Reste dans l'anneau bleu pour toucher le boss, et sors des cercles de feu.</p>
+    <div class="log" id="d-log"><div class="muted">Le boss te regarde. Les meters aussi.</div></div>`);
+  const log = logTo($("#d-log", root), 3);
+
+  const rangeRing = new T.Mesh(new T.RingGeometry(RANGE - 0.07, RANGE, 72), flat3(0x4a86e8, { transparent: true, opacity: 0.55 })); rangeRing.rotation.x = -Math.PI / 2; rangeRing.position.y = 0.02; A.scene.add(rangeRing);
+  const player = makeFigure(0xe0ad4a, { kit: "dps", name: S.name, labelColor: "#e0ad4a" }); A.scene.add(player);
+  const marker = new T.Mesh(new T.RingGeometry(0.25, 0.4, 20), flat3(0x7dffa8, { transparent: true, opacity: 0 })); marker.rotation.x = -Math.PI / 2; marker.position.y = 0.03; A.scene.add(marker);
+
+  const rnd = () => 1 + Math.floor(Math.random() * 4);
+  let seq = rnd(), px = 0, pz = 5.5, target = null;
+  let dmg = 0, combo = 0, maxCombo = 0, lives = 3, t = 0, over = false, dead = false, deadAt = 0;
+  let dodges = 0, burns = 0, greedyHits = 0, misses = 0, nextFire = 2.5, burnCd = 0.5, inWarn = false, rangeMsg = 0, killed = false;
+  const keys = { up: false, down: false, left: false, right: false };
+  const fires = [], shots = [];
+
+  const bar = $("#abar", root);
+  const renderBar = () => bar.querySelectorAll("button").forEach((b) => b.classList.toggle("now", +b.dataset.k === seq));
+  renderBar();
+
+  function press(k) {
+    if (over || dead) return;
+    if (Math.hypot(px, pz) > RANGE) {
+      if (rangeMsg <= 0) { A.floatText({ x: px, z: pz, y: 2.6 }, "Hors de portée !", "hurt"); rangeMsg = 0.8; }
+      return;
+    }
+    if (inWarn) greedyHits++;
+    if (k === seq) {
+      combo++; maxCombo = Math.max(maxCombo, combo);
+      const hit = Math.round(900 * (1 + Math.min(combo, 25) * 0.08) * rand(0.9, 1.15));
+      dmg += hit; seq = rnd(); renderBar();
+      const m = new T.Mesh(new T.IcosahedronGeometry(0.2, 0), flat3([0xd9deee, 0xff7a2a, 0x8fd0ff, 0xe0ad4a][k - 1]));
+      A.scene.add(m); shots.push({ m, t: 0, from: new T.Vector3(px, 1.3, pz), hit });
+    } else {
+      combo = 0; misses++;
+      if (misses % 4 === 1) log("d", "Mauvaise touche. Combo perdu. Ta rotation ressemble à un solo de jazz.");
+    }
+  }
+  bar.querySelectorAll("button").forEach((b) => b.addEventListener("pointerdown", (e) => { e.preventDefault(); press(+b.dataset.k); }));
+
+  const MOVE = { KeyW: "up", ArrowUp: "up", KeyS: "down", ArrowDown: "down", KeyA: "left", ArrowLeft: "left", KeyD: "right", ArrowRight: "right" };
+  const onDown = (e) => {
+    if (e.target.matches && e.target.matches("input[type=text], textarea")) return;
+    if (MOVE[e.code]) { keys[MOVE[e.code]] = true; e.preventDefault(); return; }
+    if (e.repeat) return;
+    const d = digitOf(e);
+    if (d >= 1 && d <= 4) { e.preventDefault(); press(d); }
+  };
+  const onUp = (e) => { if (MOVE[e.code]) keys[MOVE[e.code]] = false; };
+  const onBlur = () => { keys.up = keys.down = keys.left = keys.right = false; };
+  window.addEventListener("keydown", onDown); window.addEventListener("keyup", onUp); window.addEventListener("blur", onBlur);
+  S.cleanups.push(() => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); window.removeEventListener("blur", onBlur); });
+  A.canvas.addEventListener("pointerdown", (e) => {
+    if (over || dead) return;
+    const p = A.groundAt(e); if (!p) return;
+    const l = Math.hypot(p.x, p.z), m = ARENA_R - 0.7;
+    if (l > m) { p.x *= m / l; p.z *= m / l; }
+    target = p; marker.position.set(p.x, 0.03, p.z); marker.material.opacity = 0.9;
+  });
+
+  function burn(msg) {
+    lives--; burns++; burnCd = 1.5; A.flash();
+    A.floatText({ x: px, z: pz, y: 2.4 }, "Aïe !", "hurt");
+    if (lives <= 0) {
+      dead = true; deadAt = t; player.userData.fall();
+      log("d", "Tu es mort dans le feu. Ton DPS était superbe, c'est ce qui compte. Non.");
+    } else log("d", msg || pick(["Tu brûles. Le healer soupire.", "Ça sent le cramé.", "Le feu fait mal. Qui l'eût cru ?"]));
+  }
+
+  A.onFrame((dt, now) => {
+    if (over) return;
+    t += dt; rangeMsg -= dt;
+
+    if (!dead) {
+      const mx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), mz = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+      let moving = false;
+      if (mx || mz) { const l = Math.hypot(mx, mz); px += (mx / l) * SPEED * dt; pz += (mz / l) * SPEED * dt; target = null; moving = true; player.userData.rig.rotation.y = Math.atan2(mx, mz); }
+      else if (target) {
+        const dx = target.x - px, dz = target.z - pz, d = Math.hypot(dx, dz);
+        if (d < 0.15) target = null;
+        else { const s = Math.min(d, SPEED * dt); px += (dx / d) * s; pz += (dz / d) * s; moving = true; player.userData.rig.rotation.y = Math.atan2(dx, dz); }
+      }
+      let l = Math.hypot(px, pz);
+      if (l > ARENA_R - 0.7) { px *= (ARENA_R - 0.7) / l; pz *= (ARENA_R - 0.7) / l; }
+      if (l < 3) { if (l < 0.01) { pz = 3; } else { px *= 3 / l; pz *= 3 / l; } }
+      if (!moving) player.userData.rig.rotation.y = Math.atan2(-px, -pz);
+      player.position.set(px, moving ? Math.abs(Math.sin(now * 12)) * 0.12 : 0, pz);
+    }
+    marker.material.opacity = Math.max(0, marker.material.opacity - dt * 1.5);
+
+    nextFire -= dt;
+    if (!dead && nextFire <= 0) {
+      const f = makeFire(px, pz, 2.3 + Math.min(0.9, t * 0.03)); A.scene.add(f.g); fires.push(f);
+      nextFire = rand(2.3, 3.6) * Math.max(0.65, 1 - t * 0.012);
+    }
+    inWarn = false; let inBurn = false;
+    for (const f of [...fires]) {
+      f.t += dt;
+      const inside = Math.hypot(px - f.x, pz - f.z) < f.r;
+      if (f.state === "warn") {
+        const k = Math.min(1, f.t / WARN);
+        f.disc.scale.setScalar(Math.max(0.05, k)); f.disc.material.opacity = 0.2 + 0.3 * k;
+        if (inside) inWarn = true;
+        if (f.t >= WARN) {
+          f.state = "burn"; f.t = 0; f.disc.scale.setScalar(1); f.flames.forEach((m) => (m.visible = true));
+          if (!dead) { if (inside) burn("Tu es resté dans le cercle. Le healer a tout vu."); else { dodges++; } }
+        }
+      } else {
+        f.disc.material.opacity = 0.55 + Math.sin(now * 14 + f.x) * 0.12;
+        f.flames.forEach((m, i) => { m.scale.y = 0.8 + Math.sin(now * 9 + i * 2) * 0.35; });
+        if (inside) inBurn = true;
+        if (f.t > BURN) { A.scene.remove(f.g); fires.splice(fires.indexOf(f), 1); }
+      }
+    }
+    if (inBurn && !dead) { burnCd -= dt; if (burnCd <= 0) burn(); } else if (!inBurn) burnCd = 0.5;
+    A.center.textContent = dead ? "MORT" : inWarn ? "SORS DU FEU !" : inBurn ? "ÇA BRÛLE !" : "";
+
+    for (const s of [...shots]) {
+      s.t += dt / 0.22;
+      s.m.position.set(s.from.x * (1 - s.t), 1.3 + 1.4 * s.t, s.from.z * (1 - s.t));
+      if (s.t >= 1) { A.scene.remove(s.m); shots.splice(shots.indexOf(s), 1); A.floatText({ x: rand(-1, 1), y: rand(3.6, 5), z: 0.8 }, s.hit.toLocaleString("fr-FR")); }
+    }
+    A.boss.rotation.y = Math.atan2(px, pz);
+    A.boss.userData.armR.rotation.x = -0.5 + Math.sin(now * 3) * 0.4;
+    A.boss.userData.armL.rotation.x = -0.5 + Math.cos(now * 3) * 0.4;
+
+    A.camera.position.lerp(new T.Vector3(px * 0.75, 7.5, pz + 9.5), 1 - Math.exp(-dt * 5));
+    A.camera.lookAt(px * 0.5, 1.2, pz * 0.4 - 0.6);
+
+    $("#d-t", root).textContent = fmtTime(DURATION - t);
+    $("#d-dps", root).textContent = Math.round(dmg / Math.max(1, t)).toLocaleString("fr-FR");
+    $("#d-c", root).textContent = combo;
+    $("#d-l", root).innerHTML = [0, 1, 2].map((i) => `<i class="${i < lives ? "" : "off"}"></i>`).join("");
+    $("#b-hp", root).style.width = Math.max(0, 100 - (dmg / BOSS_HP) * 100) + "%";
+
+    if (dmg >= BOSS_HP) { killed = true; end(); }
+    else if (t >= DURATION || (dead && t - deadAt > 1.6)) end();
+  });
+
+  function end() {
+    over = true;
+    const dps = Math.round(dmg / Math.max(1, t)), left = Math.max(0, Math.round(100 - (dmg / BOSS_HP) * 100));
+    let bonus;
+    if (dead) bonus = -1;
+    else if (killed || (burns === 0 && dps >= 3500)) bonus = 3;
+    else if (burns <= 1) bonus = 2;
+    else bonus = 1;
+    const headline = dead ? "Meilleur DPS du cimetière."
+      : killed ? "Tu as tué le boss tout seul. Le raid se demande à quoi il sert."
+      : burns === 0 ? "Gros chiffres, pieds au sec. Le DPS rêvé."
+      : "Les meters sont contents. Le healer un peu moins.";
+    const lines = [
+      ["y", `DPS : ${dps.toLocaleString("fr-FR")} (combo max ${maxCombo}) · boss à ${left} %`],
+      ["s", `Cercles de feu esquivés : ${dodges}`],
+      burns ? ["d", `Brûlures : ${burns}${dead ? " (mort)" : ""}`] : ["s", "Aucune brûlure. Le healer t'envoie un cœur."],
+      greedyHits > 3 ? ["muted", `Tu as lancé ${greedyHits} attaques les pieds dans un cercle qui allait s'embraser. On a vu.`] : ["muted", "Tu as bougé avant de taper. C'est rare."],
+    ];
+    later(() => done({ bonus, headline, lines, summary: `DPS : ${dps.toLocaleString("fr-FR")} dps, ${burns} brûlure(s)${dead ? ", mort" : ""}${killed ? ", boss tué" : ""}` }), 900);
+  }
+}
+
+/* ---------- TANK en 3D ---------- */
+function tankGame3D(root, done) {
+  const DURATION = 25, HEALER = { x: 0, z: 7.2 }, TANK = { x: 0, z: 3 };
+  const A = makeArena(root, { camPos: [0, 11.5, 13.2], camLook: [0, 0, 3.2] });
+  A.canvas.style.cursor = "crosshair";
+  A.top.innerHTML = `<div class="hud"><span>Temps <b id="t-t">25,0</b> s</span><span>Provocations <b id="t-c">0</b></span><span>PV du healer <b id="t-hp">100</b></span></div>`;
+  root.insertAdjacentHTML("beforeend", `
+    <div class="btn-row" style="align-items:center"><button class="btn ghost" type="button" id="t-taunt">Provocation <kbd>1</kbd></button>
+      <p class="hint">Clique sur les monstres pour les attirer sur toi. <kbd>1</kbd> ou <kbd>Espace</kbd> provoque le plus proche du healer (1 s de recharge).</p></div>
+    <div class="log" id="t-log"><div class="muted">Le healer compte sur toi. Il a tort, mais il compte sur toi.</div></div>`);
+  const log = logTo($("#t-log", root), 3);
+
+  const tank = makeFigure(0x4f7fd6, { kit: "tank", name: S.name, labelColor: "#e0ad4a" }); tank.position.set(TANK.x, 0, TANK.z); A.scene.add(tank);
+  const healer = makeFigure(0x4fc47a, { kit: "heal", name: "Soignou", bar: true }); healer.position.set(HEALER.x, 0, HEALER.z); A.scene.add(healer);
+
+  let t = 0, hp = 100, taunted = 0, leaked = 0, over = false, nextSpawn = 0.6, cd = 0;
+  const mobs = [];
+
+  function spawn() {
+    let a, x, z;
+    do { a = rand(0, Math.PI * 2); x = Math.cos(a) * 10.2; z = Math.sin(a) * 10.2; } while (Math.hypot(x - HEALER.x, z - HEALER.z) < 6.5 || z > 9);
+    const big = Math.random() < Math.min(0.35, 0.08 + t * 0.012);
+    const m = { g: makeMob(big), x, z, big, hits: big ? 2 : 1, state: "run", speed: (big ? rand(2.3, 3) : rand(3.3, 4.6)) * (1 + t * 0.02), slot: rand(0, Math.PI * 2), t: 0, ph: rand(0, 6) };
+    m.g.userData.pick = m; m.g.position.set(x, 0, z); A.scene.add(m.g); mobs.push(m);
+  }
+  function hit(m) {
+    if (over || m.state !== "run") return;
+    m.hits--;
+    if (m.hits > 0) { A.floatText({ x: m.x, z: m.z, y: 2.8 }, "Encore !"); return; }
+    m.state = "taunted"; taunted++;
+    A.floatText({ x: m.x, z: m.z, y: m.big ? 2.8 : 2 }, pick(["Provoqué !", "Ici !", "Viens là !", "Regarde-moi !"]));
+  }
+  A.canvas.addEventListener("pointerdown", (e) => {
+    const m = A.pick(e, mobs.filter((m) => m.state === "run").map((m) => m.g));
+    if (m) { e.preventDefault(); hit(m); }
+  });
+  function keyTaunt() {
+    if (over || cd > 0) return;
+    const run = mobs.filter((m) => m.state === "run");
+    if (!run.length) return;
+    run.sort((a, b) => Math.hypot(a.x - HEALER.x, a.z - HEALER.z) - Math.hypot(b.x - HEALER.x, b.z - HEALER.z));
+    cd = 1; hit(run[0]);
+  }
+  $("#t-taunt", root).addEventListener("click", keyTaunt);
+  S.keyHandler = (e) => { if (digitOf(e) === 1 || e.code === "Space") { e.preventDefault(); if (!e.repeat) keyTaunt(); } };
+
+  A.onFrame((dt, now) => {
+    if (over) return;
+    t += dt; cd -= dt;
+    $("#t-taunt", root).disabled = cd > 0;
+    nextSpawn -= dt;
+    if (nextSpawn <= 0) { spawn(); nextSpawn = Math.max(0.45, 1.3 - t * 0.035) * rand(0.7, 1.3); }
+    let held = 0;
+    for (const m of [...mobs]) {
+      const tx = m.state === "run" ? HEALER.x : TANK.x + Math.cos(m.slot) * 1.5, tz = m.state === "run" ? HEALER.z : TANK.z + Math.sin(m.slot) * 1.5;
+      const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz);
+      if (m.state === "run" && d < 0.9) {
+        hp -= m.big ? 25 : 12; leaked++; A.flash();
+        A.floatText({ x: HEALER.x, z: HEALER.z, y: 2.6 }, m.big ? "-25" : "-12", "hurt");
+        log("d", pick(["Le healer se fait taper. Il écrit déjà son message.", "Un monstre mord le healer. Le healer te regarde.", "« TANK ?! » — le healer", "Le healer court en rond. Ça n'aide pas."]));
+        A.scene.remove(m.g); mobs.splice(mobs.indexOf(m), 1); continue;
+      }
+      if (m.state === "held") {
+        held++; m.t += dt;
+        m.g.position.y = Math.abs(Math.sin(now * 8 + m.ph)) * 0.2;
+        if (m.t > 2) { m.state = "dying"; m.t = 0; }
+      } else if (m.state === "dying") {
+        m.t += dt; m.g.scale.multiplyScalar(Math.max(0, 1 - dt * 6));
+        if (m.t > 0.4) { A.scene.remove(m.g); mobs.splice(mobs.indexOf(m), 1); }
+      } else if (d > 0.12) {
+        const s = Math.min(d, (m.state === "taunted" ? 9 : m.speed) * dt);
+        m.x += (dx / d) * s; m.z += (dz / d) * s;
+        m.g.position.set(m.x, Math.abs(Math.sin(now * 10 + m.ph)) * 0.15, m.z); m.g.rotation.y = Math.atan2(dx, dz);
+      } else if (m.state === "taunted") { m.state = "held"; m.t = 0; m.g.rotation.y = Math.atan2(TANK.x - m.x, TANK.z - m.z); }
+    }
+    tank.userData.rig.rotation.y = held ? tank.userData.rig.rotation.y + dt * 9 : Math.PI;
+    healer.position.x = HEALER.x + (hp < 60 ? Math.sin(now * 14) * 0.08 : 0);
+    A.boss.userData.armR.rotation.x = -0.6 + Math.sin(now * 4) * 0.5;
+    hp = Math.max(0, hp);
+    healer.userData.setHp(hp / 100);
+    $("#t-t", root).textContent = fmtTime(DURATION - t);
+    $("#t-c", root).textContent = taunted;
+    $("#t-hp", root).textContent = Math.round(hp);
+    if (hp <= 0 || t >= DURATION) end();
+  });
+
+  function end() {
+    over = true;
+    const dead = hp <= 0;
+    if (dead) { healer.userData.fall(); A.center.textContent = "HEALER MORT"; }
+    const bonus = dead ? -2 : hp >= 80 ? 3 : hp >= 50 ? 2 : hp >= 20 ? 1 : 0;
+    const headline = dead ? "Le healer est mort. Il le savait. Il l'a toujours su."
+      : hp >= 80 ? "Mur imprenable. Le healer a eu le temps de boire un thé."
+      : hp >= 50 ? "Le healer est un peu cabossé, mais vivant."
+      : "Le healer survit de justesse. Il te fera un retour constructif.";
+    const lines = [
+      ["y", `PV du healer à la fin : ${Math.round(hp)} / 100`],
+      ["s", `Monstres provoqués : ${taunted}`],
+      leaked ? ["d", `Monstres passés au travers : ${leaked}`] : ["s", "Aucun monstre n'a touché le healer. Il ne te croira jamais."],
+    ];
+    later(() => done({ bonus, headline, lines, summary: `Tank : healer à ${Math.round(hp)} PV, ${taunted} provocations, ${leaked} fuites` }), 900);
+  }
+}
+
+/* ---------- HEAL en 3D ---------- */
+function healGame3D(root, done) {
+  const T = THREE, DURATION = 25;
+  const shift = window.innerWidth > 620 ? -2.3 : 0; // laisse la place aux cadres de raid à gauche
+  const A = makeArena(root, { camPos: [shift, 9.5, 17], camLook: [shift, 1, 3.2] });
+  const party = [
+    { n: "Bouclierus", r: "Tank", kit: "tank", col: 0x4f7fd6, dps: 9, pos: [0, 3] },
+    { n: "Pyrolâtre", r: "DPS", kit: "dps", col: 0xd6734f, dps: 7, pos: [-3.6, 3.8], note: "dans le feu" },
+    { n: "Kevinator", r: "DPS", kit: "dps", col: 0xc9a14f, dps: 3.5, pos: [3.6, 3.8] },
+    { n: "Flèchemolle", r: "DPS", kit: "dps", col: 0x8fb84f, dps: 2, pos: [-5.6, 6.8] },
+    { n: "Dotdotdot", r: "DPS", kit: "dps", col: 0x9a6fd6, dps: 2, pos: [5.6, 6.8], note: "AFK" },
+    { n: S.name, r: "Heal", kit: "heal", col: 0x4fc47a, dps: 1.6, pos: [0, 9], self: true },
+  ].map((p) => ({ ...p, hp: 100, dead: false }));
+  party.forEach((p) => {
+    p.g = makeFigure(p.col, { kit: p.kit, name: p.n, bar: true, labelColor: p.self ? "#e0ad4a" : undefined });
+    p.g.position.set(p.pos[0], 0, p.pos[1]); p.g.userData.pick = p; A.scene.add(p.g);
+  });
+  const fire = makeFire(party[1].pos[0], party[1].pos[1], 1.5); fire.state = "burn"; fire.disc.material.opacity = 0.6; fire.flames.forEach((m) => (m.visible = true)); A.scene.add(fire.g);
+
+  A.top.innerHTML = `
+    <div class="s3-boss"><span>${BOSS_NAME}</span><div class="bar"><i style="width:100%"></i></div></div>
+    <div class="hud"><span>Temps <b id="h-t">25,0</b> s</span><span>Mana <b id="h-m">100</b></span><span>Soins <b id="h-h">0</b></span></div>`;
+  A.left.innerHTML = party.map((p, i) => `<button class="frame" type="button" id="hf-${i}" data-i="${i}">
+      <span class="nm"><span>${esc(p.n)}</span><em>${i + 1}</em></span><span class="bar"><i></i></span></button>`).join("");
+  root.insertAdjacentHTML("beforeend", `
+    <div class="bar mana"><i id="h-mb"></i></div>
+    <div class="btn-row" style="align-items:center"><button class="btn ghost" type="button" id="h-group">Soin de groupe (25 mana) <kbd>Espace</kbd></button>
+      <p class="hint">Clique sur un cadre ou sur un personnage pour le soigner (8 mana). Touches <kbd>1</kbd> à <kbd>6</kbd>.</p></div>
+    <div class="log" id="h-log"><div class="muted">Le combat commence.</div></div>`);
+  const log = logTo($("#h-log", root), 4);
+  const frames = party.map((_, i) => $("#hf-" + i, root));
+  const me = party[5];
+  let mana = 100, t = 0, slamIn = rand(4, 6), slamWarn = false, over = false, healed = 0, armTarget = -0.4;
+  const beams = [];
+
+  function heal(i, amount) {
+    const p = party[i];
+    if (p.dead) return;
+    const before = p.hp; p.hp = Math.min(100, p.hp + amount); healed += Math.round(p.hp - before);
+    const pts = [new T.Vector3(me.pos[0] + 0.5, 2.1, me.pos[1]), new T.Vector3(p.pos[0], 1.2, p.pos[1])];
+    const line = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({ color: 0x7dffa8, transparent: true }));
+    A.scene.add(line); beams.push({ line, t: 0 });
+    A.floatText({ x: p.pos[0], z: p.pos[1], y: 2.9 }, "+" + amount, "heal");
+  }
+  function single(i) {
+    if (over || party[i].dead) return;
+    if (mana < 8) { log("d", "Pas assez de mana. Bois de l'eau. En vrai."); return; }
+    mana -= 8; heal(i, 30);
+  }
+  function group() {
+    if (over) return;
+    if (mana < 25) { log("d", "Pas assez de mana pour le soin de groupe."); return; }
+    mana -= 25; party.forEach((_, i) => heal(i, 15));
+  }
+  frames.forEach((f, i) => f.addEventListener("click", () => single(i)));
+  $("#h-group", root).addEventListener("click", group);
+  A.canvas.addEventListener("pointerdown", (e) => { const p = A.pick(e, party.filter((p) => !p.dead).map((p) => p.g)); if (p) single(party.indexOf(p)); });
+  S.keyHandler = (e) => {
+    const d = digitOf(e);
+    if (d >= 1 && d <= 6) { e.preventDefault(); single(d - 1); }
+    else if (e.code === "Space") { e.preventDefault(); if (!e.repeat) group(); }
+  };
+
+  function kill(p, msg) { p.hp = 0; p.dead = true; p.g.userData.fall(); log("d", msg); }
+
+  A.onFrame((dt, now) => {
+    for (const b of [...beams]) { b.t += dt; b.line.material.opacity = Math.max(0, 1 - b.t / 0.3); if (b.t > 0.3) { A.scene.remove(b.line); beams.splice(beams.indexOf(b), 1); } }
+    fire.disc.material.opacity = 0.55 + Math.sin(now * 14) * 0.12;
+    fire.flames.forEach((m, i) => { m.scale.y = 0.8 + Math.sin(now * 9 + i * 2) * 0.35; });
+    const arm = A.boss.userData.armR; arm.rotation.x += (armTarget - arm.rotation.x) * Math.min(1, dt * 12);
+    A.boss.userData.armL.rotation.x = -0.7 + Math.sin(now * 5) * 0.45;
+    if (over) return;
+    t += dt;
+    mana = Math.min(100, mana + 2.6 * dt);
+    party.forEach((p) => {
+      if (p.dead) return;
+      p.hp -= p.dps * dt * rand(0.2, 1.8);
+      if (p.hp <= 0) kill(p, p.self ? "Tu es mort. Qui soigne le healer ? Personne." : `${p.n} est mort. ${pick(["Il accuse le heal.", "Il était dans le feu.", "Il demande un rez dans le chat.", "Il part chercher à manger."])}`);
+      else if (!p.self && p.kit === "dps") p.g.userData.rig.rotation.y = Math.PI + Math.sin(now * 6 + p.pos[0]) * 0.5;
+    });
+    slamIn -= dt;
+    if (slamIn < 1.2 && !slamWarn && !party[0].dead) { slamWarn = true; armTarget = -2.6; frames[0].classList.add("slam"); A.center.textContent = "Frappe Colossale !"; log("y", "Le boss arme une Frappe Colossale sur Bouclierus !"); }
+    if (slamIn <= 0) {
+      slamWarn = false; armTarget = -0.4; frames[0].classList.remove("slam"); A.center.textContent = ""; slamIn = rand(4.5, 6.5);
+      if (!party[0].dead) {
+        party[0].hp -= 38; A.flash(); A.floatText({ x: 0, z: 3, y: 2.9 }, "-38", "hurt");
+        if (party[0].hp <= 0) kill(party[0], "Bouclierus est mort. Le boss cherche une nouvelle cible. Il te regarde.");
+      }
+    }
+    $("#h-t", root).textContent = fmtTime(DURATION - t);
+    $("#h-m", root).textContent = Math.floor(mana);
+    $("#h-mb", root).style.width = mana + "%";
+    $("#h-h", root).textContent = healed;
+    party.forEach((p, i) => {
+      const f = frames[i];
+      f.querySelector(".bar > i").style.width = p.hp + "%";
+      f.classList.toggle("low", p.hp < 35 && !p.dead); f.classList.toggle("dead", p.dead); f.disabled = p.dead;
+      p.g.userData.setHp(p.hp / 100);
+    });
+    if (t >= DURATION || me.dead || party.every((p) => p.dead)) end();
+  });
+
+  function end() {
+    over = true; A.center.textContent = ""; armTarget = -0.4;
+    const alive = party.filter((p) => !p.dead).length, selfDead = me.dead, tankDead = party[0].dead;
+    let bonus = alive >= 6 ? 3 : alive === 5 ? 2 : alive === 4 ? 1 : alive >= 2 ? 0 : -2;
+    if (selfDead) bonus = Math.min(bonus, -1);
+    const headline = selfDead ? "Le healer est tombé. Tout le monde a suivi."
+      : alive === 6 ? "Personne n'est mort. Même pas Pyrolâtre."
+      : alive >= 4 ? "Quelques pertes, mais le raid tient debout."
+      : "C'est un cimetière, mais un cimetière bien soigné.";
+    const lines = [
+      ["y", `Survivants : ${alive} / 6`],
+      ["s", `Points de vie rendus : ${healed}`],
+      tankDead ? ["d", "Le tank est mort. Il en parlera pendant des semaines."] : ["s", "Le tank est vivant. Il ne te remerciera pas, c'est normal."],
+      party[1].dead ? ["muted", "Pyrolâtre est mort dans le feu. Ce n'est pas de ta faute. Dis-le lui quand même."] : ["s", "Tu as gardé en vie quelqu'un qui ne le méritait pas. Respect."],
+    ];
+    later(() => done({ bonus, headline, lines, summary: `Heal : ${alive}/6 survivants${tankDead ? " (tank mort)" : ""}` }), 900);
+  }
+}
+
+Object.assign(TRIALS.heal, { run3d: healGame3D, rules3d: `Le groupe affronte ${BOSS_NAME} pendant 25 secondes. <b>Clique sur un cadre</b> à gauche, ou directement sur un personnage, pour le soigner (8 mana, touches <kbd>1</kbd> à <kbd>6</kbd>).
+      Le <b>soin de groupe</b> coûte 25 mana (<kbd>Espace</kbd>). La mana se régénère lentement. Pyrolâtre reste dans le feu, évidemment.
+      Quand le boss lève le bras, une grosse frappe arrive sur le tank.` });
+Object.assign(TRIALS.tank, { run3d: tankGame3D, rules3d: `Pendant 25 secondes, des monstres déboulent des bords de l'arène vers Soignou, le healer. <b>Clique dessus</b> pour les provoquer : ils viennent sur toi.
+      Les gros demandent deux provocations. <kbd>1</kbd> ou <kbd>Espace</kbd> provoque le monstre le plus proche du healer, avec 1 seconde de recharge.
+      Chaque monstre qui atteint le healer lui retire des PV. S'il tombe à 0, c'est fini.` });
+Object.assign(TRIALS.dps, { run3d: dpsGame3D, rules3d: `Pendant 25 secondes, enchaîne ta rotation : la technique à lancer est surlignée dans la barre d'action (touches <kbd>1</kbd> à <kbd>4</kbd>, sans Shift sur AZERTY, ou un clic).
+      Déplace-toi avec <kbd>Z</kbd> <kbd>Q</kbd> <kbd>S</kbd> <kbd>D</kbd>, les flèches, ou en cliquant sur le sol. Reste dans l'anneau bleu, sinon tes attaques ne partent pas.
+      Un cercle apparaît régulièrement sous tes pieds : sors-en avant qu'il s'embrase (1,4 seconde), et ne remarche pas dedans. Trois brûlures et tu meurs.` });
 
 // Arrête les intervalles d'un jeu sans effacer le délai de fin qui suit.
 // (clearInterval annule aussi un setTimeout de même id : on ne touche qu'aux vrais intervalles.)
