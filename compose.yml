@@ -1,3 +1,4 @@
+# Local runs only: production uses the Normandy stack on the VPS (see README).
 services:
   apply-renatus:
     image: ${APPLY_RENATUS_IMAGE:-registry.mmyumu.fr/apply-renatus:latest}
