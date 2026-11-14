@@ -30,14 +30,20 @@ Sans configuration Supabase, le site marche quand même : le candidat copie son 
 
 ## Déploiement
 
-Le site est une image nginx (`Dockerfile`, `deploy/nginx.conf`) lancée par `compose.yml`, sur le
-modèle des autres projets : le port n'écoute que sur `127.0.0.1` (8095 par défaut, réglable avec
-`APPLY_RENATUS_PORT`), et le nginx de la machine fait le HTTPS devant.
+Le site est une image nginx (`Dockerfile`, `deploy/nginx.conf`), en ligne sur
+https://renatus.mmyumu.fr, déployé sur le VPS comme les autres projets :
 
-Avec Normandy : page du projet **apply-renatus**, choisir la machine et le nom (`*.mmyumu.fr`),
-puis **Deploy with Claude**.
+- recette Normandy `/etc/normandy-deploy/apply-renatus.json` (VPS et pi5) : l'image
+  `registry.mmyumu.fr/apply-renatus:<sha git>` est construite sur le VPS depuis GitHub ;
+- stack Compose `/home/mmyumu/docker/apply-renatus/compose.yml` sur le VPS (conteneur en lecture
+  seule, sur le réseau `internal`, sans port publié), version active dans `.env.normandy` ;
+- le nginx partagé (`infra/nginx/conf.d/renatus.conf`) fait le HTTPS et transmet au conteneur.
 
-En local :
+Mettre à jour : pousser sur `main` ; Normandy voit que GitHub est en avance sur ce qui tourne et
+lance le déploiement (`normandy-release build` puis `activate`, retour arrière automatique si le
+conteneur ne reste pas sain).
+
+Le `compose.yml` du dépôt sert seulement à lancer le site en local :
 
 ```sh
 docker compose up --build    # puis http://127.0.0.1:8095
