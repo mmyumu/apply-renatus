@@ -1,6 +1,7 @@
 <meta charset="utf-8">
 <title>Épreuve des Recrues</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 64'%3E%3Cpath d='M28 2 L52 10 V30 C52 46 40 56 28 62 C16 56 4 46 4 30 V10 Z' fill='%231f2540' stroke='%23e0ad4a' stroke-width='3'/%3E%3Cpath d='M28 14 L34 30 L28 50 L22 30 Z' fill='%23e0ad4a'/%3E%3Cpath d='M14 28 H42' stroke='%23e0ad4a' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -234,6 +235,11 @@ input[type=text]:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
 .abar button span { font-size: 12px; }
 .abar button.now { border-color: var(--gold); color: var(--gold); background: #2a2414; box-shadow: 0 0 16px #e0ad4a66; }
 .abar button.now kbd { color: var(--gold); }
+/* Hors de portée : toutes les techniques virent au rouge, comme les icônes d'un MMO. */
+.abar.oor button { background: #2a1416; border-color: #6b2a22; color: #e58a7a; }
+.abar.oor button kbd { color: #ff8a75; }
+.abar.oor button.now { border-color: var(--danger); background: #3a1614; color: #ff8a75; box-shadow: 0 0 16px #e2583f66; }
+.abar.oor button.now kbd { color: #ff8a75; }
 .hint { font-size: 14px; color: var(--muted); margin: 0; flex: 1 1 240px; }
 .hint kbd, .btn kbd, .lead kbd { font-family: var(--f-mono); font-size: .85em; border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; opacity: .85; }
 
@@ -1268,6 +1274,9 @@ function dpsGame3D(root, done) {
       player.position.set(px, moving ? Math.abs(Math.sin(now * 12)) * 0.12 : 0, pz);
     }
     marker.material.opacity = Math.max(0, marker.material.opacity - dt * 1.5);
+    const outOfRange = !dead && Math.hypot(px, pz) > RANGE;
+    bar.classList.toggle("oor", outOfRange);
+    rangeRing.material.color.set(outOfRange ? 0xe2583f : 0x4a86e8);
 
     nextFire -= dt;
     if (!dead && nextFire <= 0) {
