@@ -1,0 +1,992 @@
+<meta charset="utf-8">
+<title>Épreuve des Recrues</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout : une colonne étroite façon fenêtre d'interface de jeu, barre d'incantation en tête, une scène qui change d'écran. Look sombre assumé (un seul thème). */
+:root {
+  --night: #0e1120;
+  --stone: #171b2e;
+  --stone-2: #1f2540;
+  --line: #2f3658;
+  --gold: #e0ad4a;
+  --gold-dim: #9c7a35;
+  --text: #ece6d4;
+  --muted: #9ea4bf;
+  --hp: #3fbf6a;
+  --hp-low: #d8a636;
+  --mana: #4a86e8;
+  --danger: #e2583f;
+  --whisper: #d78cf0;
+  --f-display: "Grenze Gotisch", "UnifrakturMaguntia", Georgia, serif;
+  --f-body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { background: var(--night); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 500px at 50% -120px, #232a4d 0%, transparent 70%),
+    var(--night);
+  color: var(--text);
+  font-family: var(--f-body);
+  font-size: 17px;
+  line-height: 1.5;
+  padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 20px; }
+
+header.top { display: flex; gap: 16px; align-items: center; }
+.crest { width: 56px; height: 64px; flex: none; }
+.top h1 {
+  font-family: var(--f-display); font-weight: 700; color: var(--gold);
+  font-size: clamp(30px, 6vw, 42px); line-height: 1; margin: 0; text-wrap: balance;
+}
+.top p { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+
+/* Barre d'incantation */
+.cast { display: grid; gap: 6px; }
+.cast-row { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.cast-bar { height: 14px; border: 1px solid var(--gold-dim); background: #0a0c17; border-radius: 3px; overflow: hidden; }
+.cast-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold-dim), var(--gold)); transition: width .5s ease; box-shadow: 0 0 12px var(--gold-dim); }
+
+.panel {
+  background: linear-gradient(180deg, var(--stone-2), var(--stone));
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 24px;
+  display: grid; gap: 18px;
+  box-shadow: 0 10px 40px #0007, inset 0 1px 0 #ffffff0d;
+}
+@media (max-width: 480px) { .panel { padding: 18px 16px; } }
+
+h2 { font-family: var(--f-display); font-weight: 700; color: var(--gold); font-size: 30px; line-height: 1.1; margin: 0; text-wrap: balance; }
+h3 { margin: 0; font-size: 19px; }
+.lead { margin: 0; color: var(--text); max-width: 62ch; }
+.muted { color: var(--muted); }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.tag { border: 1px solid var(--gold-dim); padding: 1px 8px; border-radius: 3px; }
+.tag.dilemme { color: var(--whisper); border-color: var(--whisper); }
+
+label.field { display: grid; gap: 6px; font-weight: 500; }
+input[type=text] {
+  font: inherit; color: var(--text); background: #0b0e1b; border: 1px solid var(--line);
+  border-radius: 4px; padding: 10px 12px; width: 100%;
+}
+input[type=text]:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } }
+
+.roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 560px) { .roles { grid-template-columns: 1fr; } }
+.role-card { position: relative; }
+.role-card input { position: absolute; opacity: 0; pointer-events: none; }
+.role-card span {
+  display: grid; gap: 4px; height: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 5px;
+  background: #0f1324; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.role-card b { font-family: var(--f-display); font-size: 24px; color: var(--text); font-weight: 700; }
+.role-card small { color: var(--muted); font-size: 14px; line-height: 1.35; }
+.role-card input:checked + span { border-color: var(--gold); background: #2a2a2a33; box-shadow: inset 0 0 0 1px var(--gold); }
+.role-card input:checked + span b { color: var(--gold); }
+.role-card input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.oath { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--muted); }
+.oath input { margin-top: 4px; accent-color: var(--gold); width: 18px; height: 18px; flex: none; }
+
+.btn {
+  font: inherit; font-weight: 700; cursor: pointer; border-radius: 4px; padding: 11px 20px;
+  border: 1px solid var(--gold); color: #1b1404; background: linear-gradient(180deg, #f0c66a, var(--gold));
+  justify-self: start; letter-spacing: .02em;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+.btn.ghost { background: transparent; color: var(--gold); }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.err { color: var(--danger); font-size: 15px; margin: 0; }
+
+/* Quiz */
+.q-text { font-size: 22px; line-height: 1.35; margin: 0; font-weight: 500; text-wrap: pretty; }
+.answers { display: grid; gap: 8px; }
+.ans {
+  font: inherit; text-align: left; color: var(--text); background: #0f1324; border: 1px solid var(--line);
+  border-radius: 5px; padding: 12px 14px; cursor: pointer; display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline;
+}
+.ans:hover:not(:disabled) { border-color: var(--gold-dim); background: #141a30; }
+.ans:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.ans kbd { font-family: var(--f-mono); font-size: 12px; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 3px; padding: 0 6px; }
+.ans:disabled { cursor: default; opacity: .45; }
+.ans.chosen { opacity: 1; border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+
+.log {
+  font-family: var(--f-mono); font-size: 14px; line-height: 1.5; background: #070910; border: 1px solid var(--line);
+  border-radius: 4px; padding: 10px 12px; display: grid; gap: 4px;
+}
+.log .w { color: var(--whisper); }
+.log .s { color: var(--hp); }
+.log .d { color: var(--danger); }
+.log .y { color: var(--gold); }
+
+/* Test du pull */
+.pull-zone { display: grid; gap: 16px; justify-items: center; padding: 22px 8px; text-align: center; }
+.pull-msg { font-family: var(--f-mono); color: var(--muted); min-height: 1.5em; }
+.pull-btn {
+  font-family: var(--f-display); font-size: 34px; font-weight: 700; padding: 18px 38px; border-radius: 6px; cursor: pointer;
+  background: #2a1414; color: #f3c7bd; border: 2px solid #6b2a22;
+}
+.pull-btn.go { background: var(--danger); color: #fff; border-color: #ffb3a3; box-shadow: 0 0 30px #e2583f88; }
+.pull-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+/* Jeux */
+.hud { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: var(--f-mono); font-size: 14px; color: var(--muted); }
+.hud b { color: var(--text); font-variant-numeric: tabular-nums; }
+.bar { height: 12px; background: #0a0c17; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 100%; transition: width .1s linear; }
+.mana > i { background: var(--mana); }
+
+.frames { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (max-width: 520px) { .frames { grid-template-columns: repeat(2, 1fr); } }
+.frame {
+  font: inherit; text-align: left; color: var(--text); background: #0d1020; border: 1px solid var(--line); border-radius: 4px;
+  padding: 8px 10px; cursor: pointer; display: grid; gap: 4px; position: relative; min-width: 0;
+}
+.frame:active:not(:disabled) { transform: scale(.98); }
+.frame .nm { font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; gap: 6px; }
+.frame .nm em { font-style: normal; font-family: var(--f-mono); font-size: 11px; color: var(--muted); align-self: center; }
+.frame .note { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frame .bar > i { background: var(--hp); }
+.frame.low .bar > i { background: var(--hp-low); }
+.frame.dead { opacity: .4; cursor: not-allowed; }
+.frame.dead .bar > i { width: 0 !important; }
+.frame.slam { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+
+.arena {
+  position: relative; height: 320px; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; touch-action: manipulation;
+  background:
+    radial-gradient(circle at 50% 50%, #2b3156 0 12%, transparent 13%),
+    repeating-linear-gradient(45deg, #121629 0 14px, #151a30 14px 28px);
+}
+.arena.hit { animation: flash .25s; }
+@keyframes flash { 50% { box-shadow: inset 0 0 60px var(--danger); } }
+.healer-pin {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 2px;
+  font-family: var(--f-mono); font-size: 11px; color: var(--hp); pointer-events: none;
+}
+.healer-pin .dot { width: 26px; height: 26px; border-radius: 50%; background: var(--hp); box-shadow: 0 0 16px var(--hp); }
+.mob {
+  position: absolute; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 50%; cursor: crosshair;
+  background: #3a1616; color: #ffcfc4; border: 2px solid var(--danger); font-size: 20px; line-height: 1; padding: 0;
+  display: grid; place-items: center;
+}
+.mob.big { width: 54px; height: 54px; font-size: 26px; }
+.pop { position: absolute; transform: translate(-50%, -50%); font-family: var(--f-mono); font-size: 12px; color: var(--gold); pointer-events: none; animation: rise .7s forwards; white-space: nowrap; }
+@keyframes rise { to { transform: translate(-50%, -160%); opacity: 0; } }
+
+.rota { display: grid; gap: 14px; justify-items: center; padding: 18px 0; border: 1px solid var(--line); border-radius: 5px; background: #0d1020; position: relative; overflow: hidden; }
+.rota.fire { background: radial-gradient(circle at 50% 120%, #e2583f 0, #5a1a10 45%, #0d1020 75%); border-color: var(--danger); }
+.keys-next { display: flex; gap: 10px; align-items: end; }
+.keycap { font-family: var(--f-mono); font-weight: 600; border: 2px solid var(--gold-dim); border-radius: 6px; display: grid; place-items: center; color: var(--muted); width: 44px; height: 44px; font-size: 20px; }
+.keycap.now { width: 76px; height: 76px; font-size: 38px; color: var(--gold); border-color: var(--gold); box-shadow: 0 0 20px #e0ad4a55; }
+.fire-warn { font-family: var(--f-display); font-size: 30px; color: #fff; text-shadow: 0 0 12px var(--danger); min-height: 1.2em; text-align: center; }
+.pad { display: grid; grid-template-columns: repeat(4, 1fr) 1.6fr; gap: 8px; }
+.pad button { font: inherit; font-family: var(--f-mono); font-size: 18px; padding: 14px 0; border-radius: 5px; border: 1px solid var(--line); background: #141a30; color: var(--text); cursor: pointer; touch-action: manipulation; }
+.pad button.dodge { background: #2a1414; border-color: #6b2a22; font-size: 14px; }
+.rota.fire ~ .pad .dodge { background: var(--danger); color: #fff; border-color: #ffb3a3; box-shadow: 0 0 18px #e2583f99; animation: pulse .5s infinite alternate; }
+@keyframes pulse { to { transform: scale(1.05); } }
+.rota.dodged { border-color: var(--hp); box-shadow: inset 0 0 40px #3fbf6a55; }
+.rota.dodged .fire-warn { color: var(--hp); text-shadow: 0 0 12px var(--hp); }
+.pad button:active { transform: scale(.96); }
+.pips { display: inline-flex; gap: 4px; vertical-align: middle; }
+.pips i { width: 12px; height: 12px; border-radius: 50%; background: var(--hp); display: inline-block; }
+.pips i.off { background: #3a3f55; }
+
+/* Verdict */
+.verdict-head { display: grid; gap: 10px; position: relative; }
+.stamp {
+  justify-self: start; font-family: var(--f-display); font-size: clamp(34px, 8vw, 52px); font-weight: 700; line-height: 1;
+  padding: 6px 18px 10px; border: 4px double currentColor; border-radius: 6px; transform: rotate(-4deg); letter-spacing: .02em;
+  animation: stamp .45s cubic-bezier(.2,1.6,.4,1) both;
+}
+@keyframes stamp { from { transform: rotate(-4deg) scale(2.2); opacity: 0; } }
+.stamp.ok { color: var(--hp); } .stamp.mid { color: var(--gold); } .stamp.no { color: var(--danger); }
+.rank { font-size: 19px; margin: 0; }
+.rank b { color: var(--gold); }
+.stats { display: grid; gap: 10px; }
+.stat { display: grid; grid-template-columns: 150px 1fr 48px; gap: 12px; align-items: center; font-size: 15px; }
+@media (max-width: 480px) { .stat { grid-template-columns: 110px 1fr 40px; } }
+.stat .bar { height: 10px; }
+.stat .bar > i { background: var(--gold); transition: width .9s ease; }
+.stat.greed .bar > i { background: var(--danger); }
+.stat span:last-child { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.quote { margin: 0; padding: 12px 16px; border-left: 3px solid var(--whisper); background: #0b0e1b; font-style: italic; }
+textarea#copy-text {
+  width: 100%; min-height: 150px; font-family: var(--f-mono); font-size: 13px; color: var(--text); background: #070910;
+  border: 1px solid var(--line); border-radius: 4px; padding: 10px; resize: vertical;
+}
+.sep { height: 1px; background: var(--line); border: 0; margin: 0; }
+footer { text-align: center; color: var(--muted); font-size: 13px; font-family: var(--f-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <svg class="crest" viewBox="0 0 56 64" aria-hidden="true">
+      <path d="M28 2 L52 10 V30 C52 46 40 56 28 62 C16 56 4 46 4 30 V10 Z" fill="#1f2540" stroke="#e0ad4a" stroke-width="2"/>
+      <path d="M28 14 L34 30 L28 50 L22 30 Z" fill="#e0ad4a"/>
+      <path d="M14 28 H42" stroke="#e0ad4a" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1 id="guild-name">Renatus</h1>
+      <p>Bureau du recrutement · Épreuve d'admission officielle (pas du tout officielle)</p>
+    </div>
+  </header>
+
+  <div class="cast" aria-label="Progression">
+    <div class="cast-row"><span id="cast-label">Incantation : Candidature</span><span id="cast-step">0 / 0</span></div>
+    <div class="cast-bar"><div class="cast-fill" id="cast-fill"></div></div>
+  </div>
+
+  <main id="stage" class="panel" aria-live="polite"></main>
+
+  <footer>Le Conseil des Officiers se réserve le droit de te refuser pour ton pseudo.</footer>
+</div>
+
+<script>
+/* ============ CONFIG : à personnaliser ============ */
+const CONFIG = {
+  guild: "Renatus",
+  council: "Le Conseil des Officiers",
+  // Où envoyer le résumé (affiché sur l'écran final)
+  sendTo: "colle ce résumé dans le salon #candidatures de notre Discord",
+};
+
+/* ============ ÉTAT ============ */
+const S = {
+  name: "", cls: "", role: "",
+  stats: { fia: 0, skill: 0, team: 0, greed: 0 },
+  answers: [],
+  qi: 0,
+  patience: null,       // {ok, ms, text, bonus}
+  trials: {},           // role -> {bonus, summary, detail}
+  keyHandler: null,
+  timers: [],
+};
+
+const ROLES = {
+  tank: { label: "Tank", blurb: "Je prends les coups. Et les reproches." },
+  heal: { label: "Heal", blurb: "Je regarde des barres vertes toute la soirée." },
+  dps:  { label: "DPS",  blurb: "Je regarde surtout les meters." },
+};
+
+/* ============ QUESTIONS ============ */
+const Q = [
+  { tag: "QCM", q: "Le raid commence à 21h00. Tu te connectes à…", a: [
+    { t: "20h45. Buffé, réparé, flasques et nourriture dans les sacs.", s: { fia: 2 }, r: "Un officier verse une larme de joie." },
+    { t: "21h00 pile, en train de réparer chez le vendeur.", s: { fia: 1 }, r: "Acceptable. À peine." },
+    { t: "21h20. « dsl je mangeais »", s: { fia: -1 }, r: "On a pull sans toi. On a wipe. C'est quand même ta faute." },
+    { t: "Le raid, c'était ce soir ?", s: { fia: -2 }, r: "Inscrit dans le Grand Livre de la Honte, page 47." },
+  ]},
+  { tag: "QCM", q: "Le tank annonce : « Attendez mon signal avant d'attaquer. » Tu…", a: [
+    { t: "Attends le signal. Comme un être humain civilisé.", s: { fia: 1, team: 1 }, r: "Le tank ne savait pas que c'était possible." },
+    { t: "Ouvres sur le pack parce qu'il était « trop lent ».", s: { team: -2 }, r: "Ton nom sera gravé sur la stèle du wipe." },
+    { t: "Écris « go go go » dans le chat.", s: { team: -1 }, r: "Le tank a lu. Le tank s'en souviendra." },
+    { t: "Es AFK, donc techniquement tu attends.", s: { fia: -1, skill: 1 }, r: "Techniquement correct. La meilleure sorte de correct." },
+  ]},
+  { tag: "Dilemme", q: "Un objet tombe. Pour toi c'est +2 % de dégâts. Pour le healer c'est +40 %. Personne ne regarde le loot.", a: [
+    { t: "Je passe. Évidemment.", s: { greed: -2, team: 2 }, r: "Le healer t'a ajouté en ami. Tu ne mourras plus jamais." },
+    { t: "Je roll « pour mon reroll ».", s: { greed: 2 }, r: "Ton reroll niveau 12 te remercie." },
+    { t: "Je need, puis « déco internet ».", s: { greed: 3, team: -2 }, r: "Le grand classique du ninja-loot. Ta connexion est revenue pile après le partage, curieux." },
+    { t: "J'ouvre un débat de 45 minutes sur Discord.", s: { team: -1, fia: -1 }, r: "Le raid lead t'a mute à la minute 3." },
+  ]},
+  { tag: "QCM", q: "Tu es debout dans le feu. Que fais-tu ?", a: [
+    { t: "Je sors du feu.", s: { skill: 2 }, r: "Réponse rare. Précieuse." },
+    { t: "Je finis mon incantation d'abord.", s: { skill: -1 }, r: "Ton cast durait 3 secondes. Il te restait 1,5 seconde à vivre." },
+    { t: "Le feu ? Quel feu ?", s: { skill: -2 }, r: "Celui qui fait clignoter ton écran en rouge depuis 10 secondes." },
+    { t: "Je reste, le healer est payé pour ça.", s: { team: -2 }, r: "Le healer n'est pas payé. Le healer note tout." },
+  ]},
+  { tag: "Dilemme", q: "14e wipe sur le même boss. Il est 0h50. Ton message dans le vocal :", a: [
+    { t: "« Allez, on en remet une, on l'a ! »", s: { team: 2 }, r: "Le moral du raid remonte de 3 %. C'est énorme." },
+    { t: "« Je regarde les logs deux minutes, je crois que j'ai trouvé le problème. »", s: { skill: 2, team: 1 }, r: "Officier potentiel détecté." },
+    { t: "« Le healer dort ou quoi ? »", s: { team: -2 }, r: "Le healer était ton seul ami. Était." },
+    { t: "Rien. Tu quittes le Discord sans un mot.", s: { fia: -2 }, r: "Ton fantôme est encore listé dans le roster." },
+  ]},
+  { tag: "QCM", q: "Tu es dernier aux meters. Explication officielle ?", a: [
+    { t: "« J'étais sur les mécaniques. »", s: { skill: 1 }, r: "Les logs disent que non, mais on salue l'audace." },
+    { t: "« Lag. »", s: { fia: -1 }, r: "Le lag, ce fléau qui ne frappe que toi, et uniquement en raid." },
+    { t: "« Je suis healer. »", s: { skill: 1, team: 1 }, r: "Ah. Alors c'est plutôt rassurant." },
+    { t: "« Les meters mentent. »", s: { team: -1, skill: -1 }, r: "Les meters n'ont jamais menti. Les meters sont la vérité." },
+  ]},
+  { tag: "Dilemme", q: "Le raid lead fait une blague nulle en vocal. Silence total. Tu…", a: [
+    { t: "Ris trop fort pour sauver l'ambiance.", s: { team: 2 }, r: "Héros méconnu. Le raid lead t'en est reconnaissant à vie." },
+    { t: "Tapes « lol » dans le chat, sans émotion.", s: { team: 1 }, r: "Le strict minimum syndical. C'est déjà ça." },
+    { t: "Expliques pourquoi la blague ne marche pas.", s: { team: -2 }, r: "Personne n'a ri. Encore moins maintenant." },
+    { t: "Restes silencieux. Comme tout le monde. Pour toujours.", s: {}, r: "Le silence a duré 11 secondes. Tout le monde s'en souvient." },
+  ]},
+  { tag: "QCM", q: "Ta préparation avant un nouveau boss :", a: [
+    { t: "Vidéo, guide écrit, et un schéma fait à la main.", s: { skill: 2, fia: 1 }, r: "Tu nous fais un peu peur. Dans le bon sens." },
+    { t: "La vidéo en x2, pendant le trash.", s: { skill: 1 }, r: "Efficace. Sale, mais efficace." },
+    { t: "Je suis la personne devant moi.", s: {}, r: "Et la personne devant toi suit qui ? Exactement." },
+    { t: "Une strat ? Pour quoi faire ?", s: { skill: -2 }, r: "Pour éviter de mourir à la 4e seconde, par exemple." },
+  ]},
+  { tag: "Dilemme", q: "La banque de guilde contient 50 flasques. Le raid est demain.", a: [
+    { t: "J'en prends 2, comme prévu.", s: { fia: 1 }, r: "Le trésorier hoche la tête, satisfait." },
+    { t: "J'en prends 12. Au cas où.", s: { greed: 2 }, r: "Au cas où quoi ? Un raid de 6 heures ?" },
+    { t: "J'en dépose 10 que j'ai fabriquées moi-même.", s: { team: 2, greed: -1 }, r: "Toi, on t'aime déjà." },
+    { t: "Je les revends à l'hôtel des ventes.", s: { greed: 3, team: -2 }, r: "Audacieux. Interdit. Mémorisé." },
+  ]},
+  { tag: "Dilemme", q: "Une seule résurrection en combat. Sont morts : le tank, le healer, et ton meilleur pote (DPS).", a: [
+    { t: "Le tank. Toujours le tank.", s: { skill: 2 }, r: "Froid. Logique. Correct." },
+    { t: "Le healer, il nous sauvera tous.", s: { skill: 1 }, r: "Pari raisonnable, tant que le tank tient encore 3 secondes." },
+    { t: "Mon pote. L'amitié avant tout.", s: { skill: -2, team: 1 }, r: "Ton pote te remercie. Le raid wipe dans 4 secondes." },
+    { t: "Moi-même. Je suis mort aussi.", s: { skill: -1 }, r: "On ne sait pas comment, mais c'est impressionnant." },
+  ]},
+  { tag: "QCM", q: "Combien de fois as-tu dit « dernier essai » ce soir ?", a: [
+    { t: "Une fois, et c'était vraiment le dernier.", s: { fia: 1 }, r: "Un homme ou une femme de parole. Ça existe donc." },
+    { t: "Quatre.", s: { team: 1 }, r: "Ça s'appelle de l'optimisme." },
+    { t: "Je n'ai pas de limite.", s: { team: 2, fia: -1 }, r: "Le soleil se lève. Tu dis encore « dernier essai »." },
+  ]},
+];
+
+const TOTAL_STEPS = 1 + Q.length + 1 + 1 + 1; // intro + quiz + pull + épreuve + verdict
+
+/* ============ UTILITAIRES ============ */
+const $ = (sel, root = document) => root.querySelector(sel);
+const stage = $("#stage");
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Chiffre pressé, quel que soit le clavier (AZERTY sans Shift, pavé numérique, QWERTY).
+function digitOf(e) {
+  const m = /^(?:Digit|Numpad)(\d)$/.exec(e.code || "");
+  if (m) return +m[1];
+  const i = "&é\"'(-".indexOf(e.key);
+  if (i >= 0) return i + 1;
+  return /^\d$/.test(e.key) ? +e.key : 0;
+}
+
+function later(fn, ms) { const id = setTimeout(fn, ms); S.timers.push(id); return id; }
+const INTERVALS = new Set();
+function every(fn, ms) { const id = setInterval(fn, ms); S.timers.push(id); INTERVALS.add(id); return id; }
+function clearAll() { S.timers.forEach((id) => { clearTimeout(id); clearInterval(id); }); S.timers = []; S.keyHandler = null; }
+
+function setStep(n, label) {
+  $("#cast-fill").style.width = Math.round((n / TOTAL_STEPS) * 100) + "%";
+  $("#cast-step").textContent = `${n} / ${TOTAL_STEPS}`;
+  $("#cast-label").textContent = "Incantation : " + label;
+}
+
+function show(html) { clearAll(); stage.innerHTML = html; window.scrollTo({ top: 0, behavior: "smooth" }); }
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input[type=text], textarea")) return;
+  if (S.keyHandler) S.keyHandler(e);
+});
+
+function addStats(s) { for (const k in s) S.stats[k] += s[k]; }
+
+/* ============ ÉCRAN 1 : INTRO ============ */
+function screenIntro() {
+  setStep(0, "Candidature");
+  show(`
+    <div class="eyebrow"><span>Formulaire de recrutement</span></div>
+    <h2>Tu veux nous rejoindre ? Prouve-le.</h2>
+    <p class="lead">Quelques questions, des dilemmes moraux inacceptables, un test de réflexes et une mise en situation dans ton rôle.
+      À la fin, ${esc(CONFIG.council)} rend son verdict. Il est définitif, sauf si tu ramènes des cookies.</p>
+    <form id="f-intro" class="panel" style="padding:0;border:0;box-shadow:none;background:none" novalidate>
+      <div class="row2">
+        <label class="field">Pseudo en jeu
+          <input type="text" id="in-name" maxlength="24" autocomplete="off" placeholder="ex. Tankenstein" value="${esc(S.name)}">
+        </label>
+        <label class="field">Classe / spé
+          <input type="text" id="in-class" maxlength="30" autocomplete="off" placeholder="ex. Paladin Protection" value="${esc(S.cls)}">
+        </label>
+      </div>
+      <fieldset style="border:0;padding:0;margin:0;display:grid;gap:8px">
+        <legend style="font-weight:500;margin-bottom:8px">Ton rôle principal</legend>
+        <div class="roles">
+          ${Object.entries(ROLES).map(([k, r]) => `
+            <label class="role-card"><input type="radio" name="role" id="role-${k}" value="${k}" ${S.role === k ? "checked" : ""}>
+              <span><b>${r.label}</b><small>${r.blurb}</small></span></label>`).join("")}
+        </div>
+      </fieldset>
+      <label class="oath"><input type="checkbox" id="in-oath">
+        <span>Je jure solennellement de ne pas lancer « besoin » sur un objet dont je n'ai pas besoin, et de ne jamais pull à la place du tank.</span></label>
+      <p class="err" id="intro-err" hidden></p>
+      <button class="btn" type="submit" id="btn-start">Commencer l'épreuve</button>
+    </form>
+  `);
+  $("#f-intro").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("#in-name").value.trim();
+    const cls = $("#in-class").value.trim();
+    const role = (document.querySelector("input[name=role]:checked") || {}).value;
+    const err = $("#intro-err");
+    let msg = "";
+    if (!name) msg = "Il nous faut ton pseudo. « Anonyme » est déjà pris par le raid lead.";
+    else if (!role) msg = "Choisis un rôle. « Un peu de tout » n'est pas un rôle.";
+    else if (!$("#in-oath").checked) msg = "Tu n'as pas coché le serment. On note.";
+    if (msg) { err.textContent = msg; err.hidden = false; return; }
+    Object.assign(S, { name, cls: cls || "Classe mystère", role, stats: { fia: 0, skill: 0, team: 0, greed: 0 }, answers: [], qi: 0, patience: null, trials: {} });
+    screenQuestion();
+  });
+}
+
+/* ============ ÉCRAN 2 : QUIZ ============ */
+function screenQuestion() {
+  const i = S.qi, item = Q[i];
+  setStep(1 + i, "Interrogatoire");
+  show(`
+    <div class="eyebrow"><span class="tag ${item.tag === "Dilemme" ? "dilemme" : ""}">${item.tag}</span><span>Question ${i + 1} sur ${Q.length}</span></div>
+    <p class="q-text">${esc(item.q)}</p>
+    <div class="answers" id="answers">
+      ${item.a.map((a, k) => `<button class="ans" type="button" id="ans-${k}" data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(a.t)}</span></button>`).join("")}
+    </div>
+    <div id="after" hidden style="display:grid;gap:14px">
+      <div class="log" id="react"></div>
+      <button class="btn" type="button" id="btn-next">${i + 1 < Q.length ? "Question suivante" : "Passer au test du pull"}</button>
+    </div>
+  `);
+  let answered = false;
+  const choose = (k) => {
+    if (answered || !item.a[k]) return;
+    answered = true;
+    const a = item.a[k];
+    addStats(a.s);
+    S.answers.push({ q: item.q, a: a.t });
+    stage.querySelectorAll(".ans").forEach((b) => { b.disabled = true; if (+b.dataset.k === k) b.classList.add("chosen"); });
+    $("#react").innerHTML = `<div class="w">[${esc(CONFIG.council)}] chuchote : ${esc(a.r)}</div>${statLine(a.s)}`;
+    $("#after").hidden = false;
+    $("#btn-next").focus();
+  };
+  stage.querySelectorAll(".ans").forEach((b) => b.addEventListener("click", () => choose(+b.dataset.k)));
+  $("#btn-next").addEventListener("click", next);
+  function next() { S.qi++; S.qi < Q.length ? screenQuestion() : screenPull(); }
+  S.keyHandler = (e) => {
+    const d = digitOf(e);
+    if (!answered && d >= 1 && d <= 4) { e.preventDefault(); choose(d - 1); }
+  };
+}
+
+const STAT_NAMES = { fia: "Fiabilité", skill: "Skill", team: "Esprit d'équipe", greed: "Tendance ninja" };
+function statLine(s) {
+  const parts = Object.entries(s).filter(([, v]) => v).map(([k, v]) => {
+    const good = k === "greed" ? v < 0 : v > 0;
+    return `<span class="${good ? "s" : "d"}">${v > 0 ? "+" : ""}${v} ${STAT_NAMES[k]}</span>`;
+  });
+  return parts.length ? `<div>${parts.join(" · ")}</div>` : `<div class="muted">Aucun effet. Le Conseil reste impassible.</div>`;
+}
+
+/* ============ ÉCRAN 3 : TEST DU PULL ============ */
+function screenPull() {
+  setStep(1 + Q.length, "Test du pull");
+  show(`
+    <div class="eyebrow"><span class="tag">Réflexes</span><span>Test du pull</span></div>
+    <h2>Attends le signal du tank</h2>
+    <p class="lead">Le tank se met en place. Quand il donne le signal, clique sur <b>ATTAQUER</b> le plus vite possible.
+      Si tu cliques avant… eh bien, tu sais ce qui se passe.</p>
+    <div class="pull-zone">
+      <div class="pull-msg" id="pull-msg">Prêt ? Clique sur « Le tank est prêt » pour lancer.</div>
+      <button class="pull-btn" type="button" id="pull-btn" hidden>ATTAQUER</button>
+      <button class="btn" type="button" id="pull-start">Le tank est prêt</button>
+    </div>
+    <div id="pull-after" hidden style="display:grid;gap:14px">
+      <div class="log" id="pull-log"></div>
+      <button class="btn" type="button" id="pull-next">Passer à l'épreuve de rôle</button>
+    </div>
+  `);
+  const msg = $("#pull-msg"), btn = $("#pull-btn");
+  let phase = "idle", goAt = 0;
+  const waits = [
+    "Le tank se place…", "Le tank ajuste son casque…", "Le tank vérifie ses buffs…",
+    "Le tank dit « attendez »…", "Le tank va chercher un verre d'eau…", "Le tank tourne la caméra…", "Le tank compte : 3… 2…",
+  ];
+  $("#pull-start").addEventListener("click", () => {
+    $("#pull-start").hidden = true; btn.hidden = false; btn.focus();
+    phase = "wait";
+    let n = 0;
+    msg.textContent = waits[0];
+    every(() => { if (phase === "wait") msg.textContent = waits[++n % waits.length]; }, 900);
+    later(() => {
+      if (phase !== "wait") return;
+      phase = "go"; goAt = performance.now();
+      btn.classList.add("go"); msg.textContent = "« GO ! »";
+      later(() => { if (phase === "go") finish({ ok: false, afk: true }); }, 3000);
+    }, rand(3000, 7500));
+  });
+  btn.addEventListener("click", () => {
+    if (phase === "wait") finish({ ok: false });
+    else if (phase === "go") finish({ ok: true, ms: Math.round(performance.now() - goAt) });
+  });
+  function finish(r) {
+    phase = "done"; clearAll();
+    btn.disabled = true;
+    let line, bonus;
+    if (r.afk) { line = `<div class="d">Le tank a pull. Tu étais où ? Le boss t'a trouvé avant toi.</div>`; bonus = -1; r.text = "AFK au pull"; S.stats.fia -= 1; }
+    else if (!r.ok) { line = `<div class="d">Tu as attaqué avant le signal. Le pack entier te regarde. Wipe.</div>`; bonus = -2; r.text = "A pull avant le tank"; S.stats.team -= 2; }
+    else {
+      const ms = r.ms;
+      r.text = `${ms} ms`;
+      if (ms < 250) { line = `<div class="s">${ms} ms. Réflexes de chat sous café.</div>`; bonus = 2; S.stats.skill += 2; }
+      else if (ms < 450) { line = `<div class="s">${ms} ms. Propre.</div>`; bonus = 1; S.stats.skill += 1; }
+      else if (ms < 900) { line = `<div class="y">${ms} ms. Correct. Le tank a déjà pris deux coups, mais correct.</div>`; bonus = 0; }
+      else { line = `<div class="d">${ms} ms. Tu as fini ton sandwich d'abord ?</div>`; bonus = -1; S.stats.skill -= 1; }
+    }
+    r.bonus = bonus;
+    S.patience = r;
+    msg.textContent = r.ok ? "Le combat commence." : "Silence gêné dans le vocal.";
+    $("#pull-log").innerHTML = line;
+    $("#pull-after").hidden = false;
+    $("#pull-next").addEventListener("click", () => screenTrialIntro(S.role));
+    $("#pull-next").focus();
+  }
+}
+
+/* ============ ÉCRAN 4 : ÉPREUVES DE RÔLE ============ */
+const TRIALS = {
+  heal: {
+    title: "Épreuve du Heal : garder tout le monde en vie",
+    rules: `Le groupe prend des dégâts pendant 25 secondes. <b>Clique sur un membre</b> pour le soigner (8 mana).
+      <b>Soin de groupe</b> coûte 25 mana. La mana se régénère lentement. Un joueur reste dans le feu, évidemment.
+      Le boss frappe fort sur le tank de temps en temps : surveille le cadre rouge.`,
+    run: healGame,
+  },
+  tank: {
+    title: "Épreuve du Tank : personne ne touche au healer",
+    rules: `Pendant 25 secondes, des monstres foncent sur le healer au centre. <b>Clique dessus</b> pour les provoquer.
+      Les gros demandent deux provocations. Chaque monstre qui atteint le healer lui retire des PV. S'il tombe à 0, c'est fini.`,
+    run: tankGame,
+  },
+  dps: {
+    title: "Épreuve du DPS : la rotation et le feu",
+    rules: `Pendant 20 secondes, enchaîne les touches de ta rotation (<kbd>1</kbd> à <kbd>4</kbd>, ou les boutons).
+      Les bonnes touches à la suite font monter le combo (sur AZERTY, pas besoin de Shift).
+      Quand la zone devient <b>rouge</b> avec « LE SOL BRÛLE », appuie sur <kbd>Espace</kbd> ou le bouton <b>Esquiver</b> en moins de 1,4 seconde. Elle passe au vert : c'est esquivé.
+      Trois brûlures et tu meurs. Ton DPS ne sert à rien si tu es mort. En théorie.`,
+    run: dpsGame,
+  },
+};
+
+function screenTrialIntro(role) {
+  setStep(2 + Q.length, "Mise en situation");
+  const t = TRIALS[role];
+  const isMain = role === S.role;
+  show(`
+    <div class="eyebrow"><span class="tag">${isMain ? "Rôle principal" : "Bonus"}</span><span>${ROLES[role].label}</span></div>
+    <h2>${t.title}</h2>
+    <p class="lead">${t.rules}</p>
+    <button class="btn" type="button" id="trial-go">C'est parti</button>
+  `);
+  $("#trial-go").addEventListener("click", () => {
+    clearAll();
+    stage.innerHTML = `<div class="eyebrow"><span class="tag">${ROLES[role].label}</span><span>En combat</span></div><div id="game" style="display:grid;gap:14px"></div>`;
+    t.run($("#game"), (res) => { S.trials[role] = res; screenTrialResult(role); });
+  });
+  $("#trial-go").focus();
+}
+
+function screenTrialResult(role) {
+  const r = S.trials[role];
+  const others = Object.keys(TRIALS).filter((k) => !S.trials[k]);
+  show(`
+    <div class="eyebrow"><span class="tag">${ROLES[role].label}</span><span>Fin du combat</span></div>
+    <h2>${esc(r.headline)}</h2>
+    <div class="log">${r.lines.map((l) => `<div class="${l[0]}">${esc(l[1])}</div>`).join("")}</div>
+    <div class="btn-row">
+      <button class="btn" type="button" id="to-verdict">Voir le verdict</button>
+      ${others.map((k) => `<button class="btn ghost" type="button" data-try="${k}">Essayer le ${ROLES[k].label} aussi</button>`).join("")}
+    </div>
+  `);
+  $("#to-verdict").addEventListener("click", screenVerdict);
+  stage.querySelectorAll("[data-try]").forEach((b) => b.addEventListener("click", () => screenTrialIntro(b.dataset.try)));
+  $("#to-verdict").focus();
+}
+
+/* ---------- HEAL ---------- */
+function healGame(root, done) {
+  const DURATION = 25;
+  const party = [
+    { n: "Bouclierus", r: "Tank", dps: 9, note: "tape le boss avec un bouclier" },
+    { n: "Pyrolâtre", r: "DPS", dps: 7, note: "reste dans le feu" },
+    { n: "Kevinator", r: "DPS", dps: 3.5, note: "a pull deux packs en plus" },
+    { n: "Flèchemolle", r: "DPS", dps: 2, note: "joue sur la wifi du train" },
+    { n: "Dotdotdot", r: "DPS", dps: 2, note: "AFK depuis 3 minutes" },
+    { n: S.name, r: "Heal", dps: 1.6, note: "c'est toi", self: true },
+  ].map((p) => ({ ...p, hp: 100, dead: false }));
+  let mana = 100, t = 0, slamIn = rand(4, 6), slamWarn = false, over = false, healed = 0;
+
+  root.innerHTML = `
+    <div class="hud"><span>Temps <b id="h-t">25,0</b> s</span><span>Mana <b id="h-m">100</b></span><span>Soins <b id="h-h">0</b></span></div>
+    <div class="bar mana"><i id="h-mb"></i></div>
+    <div class="frames" id="frames">
+      ${party.map((p, i) => `<button class="frame" type="button" id="fr-${i}" data-i="${i}">
+        <span class="nm"><span>${esc(p.n)}</span><em>${p.r}</em></span>
+        <span class="bar"><i></i></span>
+        <span class="note">${esc(p.note)}</span></button>`).join("")}
+    </div>
+    <div class="btn-row"><button class="btn ghost" type="button" id="h-group">Soin de groupe (25 mana)</button></div>
+    <div class="log" id="h-log"><div class="muted">Le combat commence.</div></div>
+  `;
+  const frames = party.map((_, i) => $("#fr-" + i, root));
+  const logEl = $("#h-log", root);
+  const log = (cls, txt) => { logEl.insertAdjacentHTML("afterbegin", `<div class="${cls}">${esc(txt)}</div>`); while (logEl.children.length > 4) logEl.lastChild.remove(); };
+
+  function heal(i, amount) {
+    const p = party[i];
+    if (p.dead) return;
+    const before = p.hp; p.hp = Math.min(100, p.hp + amount); healed += Math.round(p.hp - before);
+  }
+  frames.forEach((f, i) => f.addEventListener("click", () => {
+    if (over || party[i].dead || mana < 8) { if (mana < 8 && !over) log("d", "Pas assez de mana. Bois de l'eau. En vrai."); return; }
+    mana -= 8; heal(i, 30);
+  }));
+  $("#h-group", root).addEventListener("click", () => {
+    if (over) return;
+    if (mana < 25) { log("d", "Pas assez de mana pour le soin de groupe."); return; }
+    mana -= 25; party.forEach((_, i) => heal(i, 15));
+  });
+  S.keyHandler = (e) => { const d = digitOf(e); if (d >= 1 && d <= 6) { e.preventDefault(); frames[d - 1].click(); } };
+
+  const TICK = 100;
+  every(() => {
+    if (over) return;
+    t += TICK / 1000;
+    mana = Math.min(100, mana + 2.6 * TICK / 1000);
+    party.forEach((p, i) => {
+      if (p.dead) return;
+      p.hp -= p.dps * (TICK / 1000) * rand(0.2, 1.8);
+      if (p.hp <= 0) {
+        p.hp = 0; p.dead = true;
+        log("d", p.self ? "Tu es mort. Qui soigne le healer ? Personne." : `${p.n} est mort. ${pick(["Il accuse le heal.", "Il était dans le feu.", "Il demande un rez dans le chat.", "Il part chercher à manger."])}`);
+      }
+    });
+    slamIn -= TICK / 1000;
+    if (slamIn < 1.2 && !slamWarn && !party[0].dead) { slamWarn = true; frames[0].classList.add("slam"); log("y", "Le boss arme une Frappe Colossale sur Bouclierus !"); }
+    if (slamIn <= 0) {
+      slamWarn = false; frames[0].classList.remove("slam"); slamIn = rand(4.5, 6.5);
+      if (!party[0].dead) { party[0].hp -= 38; if (party[0].hp <= 0) { party[0].hp = 0; party[0].dead = true; log("d", "Bouclierus est mort. Le boss cherche une nouvelle cible. Il te regarde."); } }
+    }
+    render();
+    if (t >= DURATION || party[5].dead || party.every((p) => p.dead)) end();
+  }, TICK);
+
+  function render() {
+    $("#h-t", root).textContent = Math.max(0, DURATION - t).toFixed(1).replace(".", ",");
+    $("#h-m", root).textContent = Math.floor(mana);
+    $("#h-mb", root).style.width = mana + "%";
+    $("#h-h", root).textContent = healed;
+    party.forEach((p, i) => {
+      const f = frames[i];
+      f.querySelector(".bar > i").style.width = p.hp + "%";
+      f.classList.toggle("low", p.hp < 35 && !p.dead);
+      f.classList.toggle("dead", p.dead);
+      f.disabled = p.dead;
+    });
+  }
+  render();
+
+  function end() {
+    if (over) return; over = true;
+    const alive = party.filter((p) => !p.dead).length;
+    const selfDead = party[5].dead, tankDead = party[0].dead;
+    let bonus = alive >= 6 ? 3 : alive === 5 ? 2 : alive === 4 ? 1 : alive >= 2 ? 0 : -2;
+    if (selfDead) bonus = Math.min(bonus, -1);
+    const headline = selfDead ? "Le healer est tombé. Tout le monde a suivi."
+      : alive === 6 ? "Personne n'est mort. Même pas Pyrolâtre."
+      : alive >= 4 ? "Quelques pertes, mais le raid tient debout."
+      : "C'est un cimetière, mais un cimetière bien soigné.";
+    const lines = [
+      ["y", `Survivants : ${alive} / 6`],
+      ["s", `Points de vie rendus : ${healed}`],
+      tankDead ? ["d", "Le tank est mort. Il en parlera pendant des semaines."] : ["s", "Le tank est vivant. Il ne te remerciera pas, c'est normal."],
+      party[1].dead ? ["muted", "Pyrolâtre est mort dans le feu. Ce n'est pas de ta faute. Dis-le lui quand même."] : ["s", "Tu as gardé en vie quelqu'un qui ne le méritait pas. Respect."],
+    ];
+    clearIntervalsOnly();
+    later(() => done({ bonus, headline, lines, summary: `Heal : ${alive}/6 survivants${tankDead ? " (tank mort)" : ""}` }), 700);
+  }
+}
+
+/* ---------- TANK ---------- */
+function tankGame(root, done) {
+  const DURATION = 25;
+  let t = 0, hp = 100, taunted = 0, leaked = 0, over = false, nextSpawn = 0.6, last = performance.now(), raf;
+  const mobs = [];
+  root.innerHTML = `
+    <div class="hud"><span>Temps <b id="t-t">25,0</b> s</span><span>Provocations <b id="t-c">0</b></span><span>PV du healer <b id="t-hp">100</b></span></div>
+    <div class="bar"><i id="t-hb" style="background:var(--hp)"></i></div>
+    <div class="arena" id="arena"><div class="healer-pin"><span class="dot"></span><span>healer</span></div></div>
+    <div class="log" id="t-log"><div class="muted">Le healer compte sur toi. Il a tort, mais il compte sur toi.</div></div>
+  `;
+  const arena = $("#arena", root), logEl = $("#t-log", root);
+  const log = (cls, txt) => { logEl.insertAdjacentHTML("afterbegin", `<div class="${cls}">${esc(txt)}</div>`); while (logEl.children.length > 3) logEl.lastChild.remove(); };
+  const pop = (x, y, txt) => { const p = document.createElement("div"); p.className = "pop"; p.style.left = x + "%"; p.style.top = y + "%"; p.textContent = txt; arena.appendChild(p); setTimeout(() => p.remove(), 700); };
+
+  function spawn() {
+    const side = Math.floor(Math.random() * 4);
+    let x, y;
+    if (side === 0) { x = rand(4, 96); y = 4; } else if (side === 1) { x = 96; y = rand(4, 96); }
+    else if (side === 2) { x = rand(4, 96); y = 96; } else { x = 4; y = rand(4, 96); }
+    const big = Math.random() < Math.min(0.35, 0.08 + t * 0.012);
+    const el = document.createElement("button");
+    el.type = "button"; el.className = "mob" + (big ? " big" : ""); el.textContent = big ? "☠" : "✦";
+    el.setAttribute("aria-label", big ? "Gros monstre" : "Monstre");
+    const m = { x, y, el, hits: big ? 2 : 1, speed: (big ? rand(9, 12) : rand(13, 19)) * (1 + t * 0.02) };
+    el.addEventListener("pointerdown", (e) => { e.preventDefault(); hitMob(m); });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hitMob(m); } });
+    arena.appendChild(el); mobs.push(m); place(m);
+  }
+  function place(m) { m.el.style.left = m.x + "%"; m.el.style.top = m.y + "%"; }
+  function hitMob(m) {
+    if (over || !mobs.includes(m)) return;
+    m.hits--;
+    if (m.hits > 0) { pop(m.x, m.y, "Encore !"); m.el.style.opacity = .7; return; }
+    taunted++; pop(m.x, m.y, pick(["Provoqué !", "Ici !", "Viens là !", "Regarde-moi !"]));
+    remove(m);
+  }
+  function remove(m) { m.el.remove(); mobs.splice(mobs.indexOf(m), 1); }
+
+  function frame(now) {
+    if (over) return;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    nextSpawn -= dt;
+    if (nextSpawn <= 0) { spawn(); nextSpawn = Math.max(0.42, 1.25 - t * 0.035) * rand(0.7, 1.3); }
+    for (const m of [...mobs]) {
+      const dx = 50 - m.x, dy = 50 - m.y, d = Math.hypot(dx, dy);
+      if (d < 5) {
+        hp -= m.el.classList.contains("big") ? 25 : 12; leaked++;
+        arena.classList.remove("hit"); void arena.offsetWidth; arena.classList.add("hit");
+        log("d", pick(["Le healer se fait taper. Il écrit déjà son message.", "Un monstre mord le healer. Le healer te regarde.", "« TANK ?! » — le healer", "Le healer court en rond. Ça n'aide pas."]));
+        remove(m);
+        continue;
+      }
+      m.x += (dx / d) * m.speed * dt; m.y += (dy / d) * m.speed * dt; place(m);
+    }
+    hp = Math.max(0, hp);
+    $("#t-t", root).textContent = Math.max(0, DURATION - t).toFixed(1).replace(".", ",");
+    $("#t-c", root).textContent = taunted;
+    $("#t-hp", root).textContent = Math.round(hp);
+    $("#t-hb", root).style.width = hp + "%";
+    if (hp <= 0 || t >= DURATION) return end();
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame((n) => { last = n; frame(n); });
+
+  function end() {
+    over = true; cancelAnimationFrame(raf);
+    mobs.forEach((m) => m.el.remove());
+    const dead = hp <= 0;
+    const bonus = dead ? -2 : hp >= 80 ? 3 : hp >= 50 ? 2 : hp >= 20 ? 1 : 0;
+    const headline = dead ? "Le healer est mort. Il le savait. Il l'a toujours su."
+      : hp >= 80 ? "Mur imprenable. Le healer a eu le temps de boire un thé."
+      : hp >= 50 ? "Le healer est un peu cabossé, mais vivant."
+      : "Le healer survit de justesse. Il te fera un retour constructif.";
+    const lines = [
+      ["y", `PV du healer à la fin : ${Math.round(hp)} / 100`],
+      ["s", `Monstres provoqués : ${taunted}`],
+      leaked ? ["d", `Monstres passés au travers : ${leaked}`] : ["s", "Aucun monstre n'a touché le healer. Il ne te croira jamais."],
+    ];
+    later(() => done({ bonus, headline, lines, summary: `Tank : healer à ${Math.round(hp)} PV, ${taunted} provocations, ${leaked} fuites` }), 600);
+  }
+}
+
+/* ---------- DPS ---------- */
+function dpsGame(root, done) {
+  const DURATION = 20;
+  const seq = Array.from({ length: 3 }, () => 1 + Math.floor(Math.random() * 4));
+  let dmg = 0, combo = 0, maxCombo = 0, lives = 3, t = 0, over = false, fire = false, fireLeft = 0, nextFire = rand(2.5, 4.5);
+  let dodges = 0, burns = 0, greedyHits = 0, misses = 0, dead = false;
+  root.innerHTML = `
+    <div class="hud"><span>Temps <b id="d-t">20,0</b> s</span><span>DPS <b id="d-dps">0</b></span><span>Combo <b id="d-c">0</b></span><span>Vie <span class="pips" id="d-l"><i></i><i></i><i></i></span></span></div>
+    <div class="rota" id="rota">
+      <div class="keys-next" id="keys"></div>
+      <div class="fire-warn" id="fire" aria-live="assertive"></div>
+    </div>
+    <div class="pad">
+      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button>
+      <button type="button" data-k="3">3</button><button type="button" data-k="4">4</button>
+      <button type="button" class="dodge" data-k="dodge">Esquiver</button>
+    </div>
+    <div class="log" id="d-log"><div class="muted">Le boss attend. Les meters aussi.</div></div>
+  `;
+  const rota = $("#rota", root), logEl = $("#d-log", root);
+  const log = (cls, txt) => { logEl.insertAdjacentHTML("afterbegin", `<div class="${cls}">${esc(txt)}</div>`); while (logEl.children.length > 3) logEl.lastChild.remove(); };
+  function renderKeys() { $("#keys", root).innerHTML = seq.map((k, i) => `<span class="keycap ${i === 0 ? "now" : ""}">${k}</span>`).join(""); }
+  function renderHud() {
+    $("#d-t", root).textContent = Math.max(0, DURATION - t).toFixed(1).replace(".", ",");
+    $("#d-dps", root).textContent = Math.round(dmg / Math.max(1, t)).toLocaleString("fr-FR");
+    $("#d-c", root).textContent = combo;
+    $("#d-l", root).innerHTML = [0, 1, 2].map((i) => `<i class="${i < lives ? "" : "off"}"></i>`).join("");
+  }
+  renderKeys(); renderHud();
+
+  function press(k) {
+    if (over || dead) return;
+    if (k === "dodge") {
+      if (fire) {
+        fire = false; dodges++; nextFire = rand(2.2, 4);
+        rota.classList.remove("fire"); rota.classList.add("dodged");
+        $("#fire", root).textContent = "ESQUIVÉ !";
+        later(() => { if (!fire && !dead) { rota.classList.remove("dodged"); $("#fire", root).textContent = ""; } }, 700);
+        log("s", "Esquivé. Tu as un cerveau, et tu l'utilises."); combo = Math.max(0, combo - 2);
+      }
+      else log("muted", pick(["Tu sautes sans raison. Le style avant tout.", "Petite danse. Le boss est confus.", "Tu esquives… rien. Mais bien."]));
+      return;
+    }
+    if (fire) greedyHits++;
+    if (+k === seq[0]) {
+      combo++; maxCombo = Math.max(maxCombo, combo);
+      dmg += Math.round(900 * (1 + Math.min(combo, 25) * 0.08) * rand(0.9, 1.15));
+      seq.shift(); seq.push(1 + Math.floor(Math.random() * 4)); renderKeys();
+    } else {
+      combo = 0; misses++;
+      if (misses % 4 === 1) log("d", "Mauvaise touche. Combo perdu. Ta rotation ressemble à un solo de jazz.");
+    }
+    renderHud();
+  }
+  root.querySelectorAll(".pad button").forEach((b) => b.addEventListener("pointerdown", (e) => { e.preventDefault(); press(b.dataset.k); }));
+  root.querySelectorAll(".pad button").forEach((b) => b.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); press(b.dataset.k); } }));
+  S.keyHandler = (e) => {
+    const d = digitOf(e);
+    if (d >= 1 && d <= 4) { e.preventDefault(); press(String(d)); }
+    else if (e.key === " " || e.code === "Space") { e.preventDefault(); press("dodge"); }
+  };
+
+  const TICK = 50;
+  every(() => {
+    if (over) return;
+    t += TICK / 1000;
+    if (!dead) {
+      if (!fire) {
+        nextFire -= TICK / 1000;
+        if (nextFire <= 0) { fire = true; fireLeft = 1.4; rota.classList.remove("dodged"); rota.classList.add("fire"); $("#fire", root).textContent = "LE SOL BRÛLE ! Esquive [Espace]"; }
+      } else {
+        fireLeft -= TICK / 1000;
+        if (fireLeft <= 0) {
+          fire = false; rota.classList.remove("fire"); $("#fire", root).textContent = "";
+          lives--; burns++; nextFire = rand(2.2, 4);
+          if (lives <= 0) {
+            dead = true; log("d", "Tu es mort dans le feu. Ton DPS était superbe, c'est ce qui compte. Non.");
+            $("#fire", root).textContent = "MORT"; rota.classList.add("fire");
+          } else log("d", pick(["Tu brûles. Le healer soupire.", "Aïe. Ça sent le cramé.", "Le feu fait mal. Qui l'eût cru ?"]));
+        }
+      }
+      if (!fire && nextFire <= 0) nextFire = rand(2.2, 4);
+    }
+    if (!fire && !dead && nextFire > 4.5) nextFire = rand(2.2, 4);
+    renderHud();
+    if (t >= DURATION) end();
+  }, TICK);
+
+  function end() {
+    over = true; clearIntervalsOnly();
+    const dps = Math.round(dmg / Math.max(1, t));
+    let bonus;
+    if (dead) bonus = -1;
+    else if (burns === 0 && dps >= 3500) bonus = 3;
+    else if (burns <= 1) bonus = 2;
+    else bonus = 1;
+    const headline = dead ? "Meilleur DPS du cimetière."
+      : burns === 0 ? "Gros chiffres, pieds au sec. Le DPS rêvé."
+      : "Les meters sont contents. Le healer un peu moins.";
+    const lines = [
+      ["y", `DPS : ${dps.toLocaleString("fr-FR")} (combo max ${maxCombo})`],
+      ["s", `Feux esquivés : ${dodges}`],
+      burns ? ["d", `Brûlures : ${burns}${dead ? " (mort)" : ""}`] : ["s", "Aucune brûlure. Le healer t'envoie un cœur."],
+      greedyHits > 3 ? ["muted", `Tu as continué à taper ${greedyHits} fois pendant que le sol brûlait. On a vu.`] : ["muted", "Tu as su lâcher la rotation pour bouger. C'est rare."],
+    ];
+    later(() => done({ bonus, headline, lines, summary: `DPS : ${dps.toLocaleString("fr-FR")} dps, ${burns} brûlure(s)${dead ? ", mort" : ""}` }), 500);
+  }
+}
+
+// Arrête les intervalles d'un jeu sans effacer le délai de fin qui suit.
+// (clearInterval annule aussi un setTimeout de même id : on ne touche qu'aux vrais intervalles.)
+function clearIntervalsOnly() { INTERVALS.forEach((id) => clearInterval(id)); INTERVALS.clear(); S.keyHandler = null; }
+
+/* ============ ÉCRAN 5 : VERDICT ============ */
+function screenVerdict() {
+  setStep(TOTAL_STEPS, "Verdict");
+  const st = S.stats;
+  const main = S.trials[S.role];
+  const trialBonus = main ? main.bonus : 0;
+  const extra = Object.entries(S.trials).filter(([k]) => k !== S.role).reduce((a, [, r]) => a + Math.max(0, r.bonus) * 0.5, 0);
+  const score = st.fia + st.skill + st.team - st.greed + trialBonus + (S.patience ? S.patience.bonus : 0) + extra;
+
+  let stamp, cls, rank, comment;
+  if (score >= 19) { stamp = "ACCEPTÉ"; cls = "ok"; rank = "Futur officier"; comment = "On ne va pas se mentir : tu es trop bien pour nous. On te prend quand même, avant qu'une autre guilde le fasse."; }
+  else if (score >= 11) { stamp = "ACCEPTÉ"; cls = "ok"; rank = "Recrue prometteuse (période d'essai)"; comment = "Bon profil. On te garde à l'œil pendant deux semaines, puis on oublie de te passer membre pendant trois mois."; }
+  else if (score >= 4) { stamp = "EN ATTENTE"; cls = "mid"; rank = "Remplaçant de banc"; comment = "Tu as du potentiel. Beaucoup de potentiel. Surtout du potentiel. Viens sur le Discord, on en reparle."; }
+  else if (score >= -4) { stamp = "REFUSÉ"; cls = "no"; rank = "Mascotte honoraire"; comment = "Ce n'est pas un non définitif. C'est un non. Mais on a une guilde de rerolls qui recrute."; }
+  else { stamp = "BANNI"; cls = "no"; rank = "Légende du Grand Livre de la Honte"; comment = "Ta candidature sera lue à voix haute à chaque réunion d'officiers. Merci pour ce moment."; }
+
+  const traits = [
+    ["greed", st.greed, "le Ninja"], ["skill", st.skill, "le Calculateur"],
+    ["team", st.team, "l'Âme du Discord"], ["fia", st.fia, "l'Horloge Suisse"],
+  ];
+  let epithet = st.greed >= 3 ? "le Ninja" : traits.slice(1).sort((a, b) => b[1] - a[1])[0][2];
+  if (st.fia <= -3) epithet = "l'Éternel Retardataire";
+
+  const bar = (v, lo, hi) => clamp(Math.round(((v - lo) / (hi - lo)) * 10), 0, 10);
+  const vals = { fia: bar(st.fia, -5, 7), skill: bar(st.skill, -5, 11), team: bar(st.team, -5, 11), greed: bar(st.greed, -3, 6) };
+
+  const trialLines = Object.entries(S.trials).map(([k, r]) => `<div class="${k === S.role ? "y" : "muted"}">${esc(r.summary)}${k === S.role ? "" : " (bonus)"}</div>`).join("");
+  const copy = [
+    `Candidature – ${CONFIG.guild}`,
+    `Pseudo : ${S.name} (${S.cls}, ${ROLES[S.role].label})`,
+    `Verdict : ${stamp} – ${rank}`,
+    `Titre : ${S.name} ${epithet}`,
+    `Fiabilité ${vals.fia}/10 · Skill ${vals.skill}/10 · Esprit d'équipe ${vals.team}/10 · Tendance ninja ${vals.greed}/10`,
+    `Test du pull : ${S.patience ? S.patience.text : "non passé"}`,
+    ...Object.values(S.trials).map((r) => r.summary),
+    `Score secret du Conseil : ${Math.round(score * 10) / 10}`,
+  ].join("\n");
+
+  show(`
+    <div class="verdict-head">
+      <div class="eyebrow"><span>Délibération de ${esc(CONFIG.council)}</span></div>
+      <div class="stamp ${cls}">${stamp}</div>
+      <p class="rank">${esc(S.name)} <b>${esc(epithet)}</b> · ${esc(S.cls)} · ${ROLES[S.role].label}</p>
+      <p class="rank">Rang attribué : <b>${esc(rank)}</b></p>
+    </div>
+    <blockquote class="quote">${esc(comment)}</blockquote>
+    <div class="stats">
+      ${[["fia", "Fiabilité"], ["skill", "Skill"], ["team", "Esprit d'équipe"], ["greed", "Tendance ninja"]].map(([k, l]) => `
+        <div class="stat ${k}"><span>${l}</span><span class="bar"><i style="width:0" data-w="${vals[k] * 10}"></i></span><span>${vals[k]}/10</span></div>`).join("")}
+    </div>
+    <div class="log">
+      <div class="y">Test du pull : ${esc(S.patience ? S.patience.text : "non passé")}</div>
+      ${trialLines || `<div class="muted">Aucune épreuve de rôle.</div>`}
+    </div>
+    <hr class="sep">
+    <h3>Résumé à envoyer</h3>
+    <p class="muted" style="margin:0">Copie ce texte et ${esc(CONFIG.sendTo)}.</p>
+    <textarea id="copy-text" readonly>${esc(copy)}</textarea>
+    <div class="btn-row">
+      <button class="btn" type="button" id="btn-copy">Copier le résumé</button>
+      <button class="btn ghost" type="button" id="btn-again">Recommencer (on verra tout)</button>
+    </div>
+  `);
+  requestAnimationFrame(() => stage.querySelectorAll(".stat .bar > i").forEach((i) => (i.style.width = i.dataset.w + "%")));
+  $("#btn-copy").addEventListener("click", async () => {
+    const b = $("#btn-copy"), ta = $("#copy-text");
+    try { await navigator.clipboard.writeText(ta.value); b.textContent = "Copié !"; }
+    catch { ta.focus(); ta.select(); b.textContent = "Texte sélectionné, fais Ctrl+C"; }
+    setTimeout(() => (b.textContent = "Copier le résumé"), 2500);
+  });
+  $("#btn-again").addEventListener("click", screenIntro);
+}
+
+/* ============ DÉMARRAGE ============ */
+$("#guild-name").textContent = CONFIG.guild;
+document.title = "Épreuve des Recrues – " + CONFIG.guild;
+screenIntro();
+</script>
