@@ -1,0 +1,4 @@
+# Allowlist: the image needs only the page and its nginx configuration.
+*
+!index.html
+!deploy/nginx.conf

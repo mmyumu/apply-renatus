@@ -268,6 +268,9 @@ const CONFIG = {
   council: "Le Conseil des Officiers",
   // Où envoyer le résumé (affiché sur l'écran final)
   sendTo: "colle ce résumé dans le salon #candidatures de notre Discord",
+  // Base de données Supabase (voir README.md et supabase/schema.sql). Laisser vide pour désactiver.
+  supabaseUrl: "",
+  supabaseAnonKey: "",
 };
 
 /* ============ ÉTAT ============ */
@@ -395,6 +398,22 @@ document.addEventListener("keydown", (e) => {
 
 function addStats(s) { for (const k in s) S.stats[k] += s[k]; }
 
+/* ============ SAUVEGARDE ============ */
+async function saveAttempt(record) {
+  const url = CONFIG.supabaseUrl.trim().replace(/\/$/, ""), key = CONFIG.supabaseAnonKey.trim();
+  if (!url || !key) return "off";
+  const headers = { apikey: key, "Content-Type": "application/json", Prefer: "return=minimal" };
+  if (key.startsWith("eyJ")) headers.Authorization = "Bearer " + key; // ancienne clé "anon" (JWT)
+  const res = await fetch(url + "/rest/v1/candidatures", { method: "POST", headers, body: JSON.stringify(record) });
+  if (!res.ok) throw new Error(res.status + " " + (await res.text()));
+  return "ok";
+}
+// Compte les tentatives dans ce navigateur (le Conseil voit tout).
+function nextAttempt() {
+  try { const n = (parseInt(localStorage.getItem("renatus-tentatives"), 10) || 0) + 1; localStorage.setItem("renatus-tentatives", n); return n; }
+  catch { return null; }
+}
+
 /* ============ ÉCRAN 1 : INTRO ============ */
 function screenIntro() {
   setStep(0, "Candidature");
@@ -437,7 +456,7 @@ function screenIntro() {
     else if (!role) msg = "Choisis un rôle. « Un peu de tout » n'est pas un rôle.";
     else if (!$("#in-oath").checked) msg = "Tu n'as pas coché le serment. On note.";
     if (msg) { err.textContent = msg; err.hidden = false; return; }
-    Object.assign(S, { name, cls: cls || "Classe mystère", role, stats: { fia: 0, skill: 0, team: 0, greed: 0 }, answers: [], qi: 0, patience: null, trials: {} });
+    Object.assign(S, { name, cls: cls || "Classe mystère", role, stats: { fia: 0, skill: 0, team: 0, greed: 0 }, answers: [], qi: 0, patience: null, trials: {}, attempt: null, saved: false });
     screenQuestion();
   });
 }
@@ -939,8 +958,10 @@ function screenVerdict() {
   const vals = { fia: bar(st.fia, -5, 7), skill: bar(st.skill, -5, 11), team: bar(st.team, -5, 11), greed: bar(st.greed, -3, 6) };
 
   const trialLines = Object.entries(S.trials).map(([k, r]) => `<div class="${k === S.role ? "y" : "muted"}">${esc(r.summary)}${k === S.role ? "" : " (bonus)"}</div>`).join("");
+  if (!S.attempt) S.attempt = nextAttempt();
   const copy = [
     `Candidature – ${CONFIG.guild}`,
+    S.attempt > 1 ? `Tentative n°${S.attempt} (le Conseil a tout vu)` : null,
     `Pseudo : ${S.name} (${S.cls}, ${ROLES[S.role].label})`,
     `Verdict : ${stamp} – ${rank}`,
     `Titre : ${S.name} ${epithet}`,
@@ -948,7 +969,7 @@ function screenVerdict() {
     `Test du pull : ${S.patience ? S.patience.text : "non passé"}`,
     ...Object.values(S.trials).map((r) => r.summary),
     `Score secret du Conseil : ${Math.round(score * 10) / 10}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   show(`
     <div class="verdict-head">
@@ -958,6 +979,7 @@ function screenVerdict() {
       <p class="rank">Rang attribué : <b>${esc(rank)}</b></p>
     </div>
     <blockquote class="quote">${esc(comment)}</blockquote>
+    <p id="save-status" class="muted" style="margin:0" hidden></p>
     <div class="stats">
       ${[["fia", "Fiabilité"], ["skill", "Skill"], ["team", "Esprit d'équipe"], ["greed", "Tendance ninja"]].map(([k, l]) => `
         <div class="stat ${k}"><span>${l}</span><span class="bar"><i style="width:0" data-w="${vals[k] * 10}"></i></span><span>${vals[k]}/10</span></div>`).join("")}
@@ -983,6 +1005,29 @@ function screenVerdict() {
     setTimeout(() => (b.textContent = "Copier le résumé"), 2500);
   });
   $("#btn-again").addEventListener("click", screenIntro);
+
+  if (S.saved) return;
+  S.saved = true;
+  const status = $("#save-status");
+  saveAttempt({
+    pseudo: S.name, classe: S.cls, role: S.role,
+    verdict: stamp, rang: rank, titre: epithet,
+    score: Math.round(score * 10) / 10, tentative: S.attempt,
+    stats: { brut: st, sur10: vals },
+    test_pull: S.patience,
+    epreuves: Object.fromEntries(Object.entries(S.trials).map(([k, r]) => [k, { bonus: r.bonus, resume: r.summary, titre: r.headline }])),
+    reponses: S.answers,
+  }).then((r) => {
+    if (r !== "ok") return;
+    status.textContent = "Dossier transmis au Conseil. Il délibère (il regarde surtout ta Tendance ninja).";
+    status.hidden = false;
+  }).catch((err) => {
+    console.error("Sauvegarde impossible :", err);
+    S.saved = false;
+    status.textContent = "Le pigeon voyageur s'est perdu : ton dossier n'a pas été enregistré. Envoie le résumé ci-dessous sur Discord.";
+    status.className = "err";
+    status.hidden = false;
+  });
 }
 
 /* ============ DÉMARRAGE ============ */

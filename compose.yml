@@ -1,0 +1,9 @@
+services:
+  apply-renatus:
+    image: ${APPLY_RENATUS_IMAGE:-registry.mmyumu.fr/apply-renatus:latest}
+    build:
+      context: .
+    container_name: apply-renatus
+    ports:
+      - "127.0.0.1:${APPLY_RENATUS_PORT:-8095}:80"
+    restart: unless-stopped
