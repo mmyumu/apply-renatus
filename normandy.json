@@ -1,0 +1,5 @@
+{"components": [
+  {"name": "Docs", "deploy": "none", "paths": ["README.md", "CLAUDE.md", "normandy.json", ".github/**", "compose.yml"]},
+  {"name": "Site", "deploy": "auto", "paths": ["Dockerfile", ".dockerignore", "deploy/**", "index.html"], "containers": ["apply-renatus"]},
+  {"name": "Database schema", "deploy": "manual", "paths": ["supabase/**"], "how": "Apply the changed SQL in the Supabase project's SQL editor, then check the page still reads and writes."}
+ ]}
